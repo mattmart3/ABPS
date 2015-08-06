@@ -17,7 +17,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <linux/errqueue.h>
-#include <json/json.h>
+#include <json-c/json.h>
 #include <string.h>
 
 

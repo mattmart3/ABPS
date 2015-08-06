@@ -1,8 +1,8 @@
-CFLAGS=-Wall -D_GNU_SOURCE -o
-CC=clang
+CFLAGS=-Wall -o
+CC=gcc
 
 all:	libsend.c sendrecvUDP.c testlib.c sendclientapp.c
-	$(CC) $(CFLAGS) sendclientapp libsend.c sendrecvUDP.c testlib.c sendclientapp.c -l json
+	$(CC) $(CFLAGS) sendclientapp utils.c libsend.c sendrecvUDP.c testlib.c sendclientapp.c -ljson-c
 	
 
 clean: 

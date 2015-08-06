@@ -1,0 +1,44 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+
+#Vim swap files
+*.swp
+*.swo
+
+#Project dir
+drafts
+
+#Ctags file
+tags
+
+#Log files
+*.log
+*.json
+
+#Tex compile files
+*.fdb_latexmk
+*.aux
+*.out
+*.sty
