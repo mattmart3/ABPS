@@ -6,10 +6,10 @@
 
 /* Initialization and release. */
 
-int instantiate_ipv4_shared_instance_by_address_and_port(char *address, int port);
+int instantiate_ipv4_shared_instance(char *address, int port);
 
 
-int instantiate_ipv6_shared_instance_by_address_and_port(char *address, int port);
+int instantiate_ipv6_shared_instance(char *address, int port);
 
 
 void release_shared_instance(void);

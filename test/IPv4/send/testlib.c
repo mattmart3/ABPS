@@ -149,6 +149,7 @@ void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *error_me
 	char *end_string_file = "\n]}";
     for(error_message->c = CMSG_FIRSTHDR(error_message->msg); error_message->c; error_message->c = CMSG_NXTHDR(error_message->msg, error_message->c))
     {
+	   printf("ZZZZ\n"); 
         if((error_message->c->cmsg_level == IPPROTO_IP) && (error_message->c->cmsg_type == IP_RECVERR))
         {
             struct sockaddrin *from;
@@ -157,6 +158,7 @@ void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *error_me
             
             from = (struct sockaddrin *) SO_EE_OFFENDER(error_message->ee);
             
+	printf("ee_origin %d ?= %d, ee_errno %d ?= %d \n", error_message->ee->ee_origin, SO_EE_ORIGIN_LOCAL_NOTIFY, error_message->ee->ee_errno, 0);
             if((error_message->ee->ee_origin == SO_EE_ORIGIN_LOCAL_NOTIFY) && (error_message->ee->ee_errno == 0))
             {
 				/* json for log */	
@@ -164,6 +166,7 @@ void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *error_me
 
                 uint32_t identifier = error_message->ee->ee_info;
                 
+	printf("XXXX\n");
 			                
                 printf("Received notification for packet %" PRIu32 " \n", identifier);
                 

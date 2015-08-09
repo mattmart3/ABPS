@@ -20,29 +20,11 @@
 #include <json-c/json.h>
 #include <string.h>
 
-
+#include "sendrecvUDP.h"
 #include "utils.h"
-#include "testlib.h"
-
-static char *log_path;
-
-static int log_descriptor;
+#include "structs.h"
 
 static int shared_test_identifier = 0;
-
-
-
-
-
-typedef struct testlib_list
-{
-	int id_test;
-	testlib_time time_list;
-
-	struct testlib_list * next;
-
-}testlib_list;
-
 
 static testlib_list *head = NULL;
 
@@ -94,6 +76,15 @@ testlib_list* search_in_list(int id)
 }
 
 
+void current_time_with_supplied_time(testlib_time *time_lib)
+{
+	struct timeval current_time;
+	gettimeofday(&current_time, NULL);
+
+	time_lib->human_readable_time_and_date = asctime(gmtime(&current_time.tv_sec));
+
+	time_lib->milliseconds_time =((current_time.tv_sec)*1000000L+current_time.tv_usec)/1000;
+}
 
 int get_test_identifier(void)
 {
@@ -101,15 +92,7 @@ int get_test_identifier(void)
 }
 
 
-int prepare_for_logging(void)
-{
-	int return_value = lseek(log_descriptor, 0, SEEK_END);
-	return return_value;
-}
-
-
-
-void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id, int type, int hopV)
+void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id, int hopV)
 {
 
 	char *end_string_file = "\n]}";
@@ -172,7 +155,7 @@ void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, in
 				json_object *testIdJ = json_object_new_int(test_id);
 				json_object *retrycountJ = json_object_new_int(retry_count);
 				json_object *timeJ = json_object_new_int(difference);
-				json_object *typeJ = json_object_new_int(type);
+				json_object *typeJ = json_object_new_int(conf.test_type);
 				json_object *ackJ = json_object_new_boolean(acked);
 				json_object *versionJ = json_object_new_string("ipv4");
 				json_object *dateJ = json_object_new_string(c_time_string);
@@ -224,7 +207,7 @@ void ipv4_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, in
 }
 
 /* Get TED information of an error message */
-void get_ted_info(ErrMsg *emsg, int test_id, int type, int hopV) 
+void get_ted_info(ErrMsg *emsg, int test_id, int hopV) 
 {
 	char *end_string_file = "\n]}";
 	uint32_t identifier = ntohl(emsg->ee->ee_info);
@@ -257,7 +240,7 @@ void get_ted_info(ErrMsg *emsg, int test_id, int type, int hopV)
 	json_object *testIdJ = json_object_new_int(test_id);
 	json_object *retrycountJ = json_object_new_int(retry_count);
 	json_object *timeJ = json_object_new_int(difference);
-	json_object *typeJ = json_object_new_int(type);
+	json_object *typeJ = json_object_new_int(conf.test_type);
 	json_object *ackJ = json_object_new_boolean(acked);
 
 	json_object *versionJ = json_object_new_string("ipv6");
@@ -297,7 +280,7 @@ void get_ted_info(ErrMsg *emsg, int test_id, int type, int hopV)
 	
 }
 
-void ipv6_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id, int type, int hopV)
+void ipv6_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id, int hopV)
 {
 
 	/* For each error header of the previuosly sent message, 
@@ -320,7 +303,7 @@ void ipv6_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, in
 				/* TED notification */
 				case SO_EE_ORIGIN_LOCAL_NOTIFY: 
 					if(emsg->ee->ee_errno == 0) {
-						get_ted_info(emsg, test_id, type, hopV);
+						get_ted_info(emsg, test_id, hopV);
 					} else {
 						//TODO: handle errno for local notify
 					}
@@ -337,15 +320,15 @@ void ipv6_check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, in
 
 
 
-void check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id,  int type, int hopV)
+void check_and_log_local_error_notify_with_test_identifier(ErrMsg *emsg, int test_id, int hopV)
 {
 	if(emsg->is_ipv6)
 	{
-		ipv6_check_and_log_local_error_notify_with_test_identifier(emsg, test_id,type, hopV);
+		ipv6_check_and_log_local_error_notify_with_test_identifier(emsg, test_id, hopV);
 	}
 	else
 	{
-		ipv4_check_and_log_local_error_notify_with_test_identifier(emsg, test_id, type, hopV);
+		ipv4_check_and_log_local_error_notify_with_test_identifier(emsg, test_id, hopV);
 	}
 }
 
@@ -366,12 +349,3 @@ void sent_packet_with_packet_and_test_identifier(uint32_t packet_identifier, int
 }
 
 
-void current_time_with_supplied_time(testlib_time *time_lib)
-{
-	struct timeval current_time;
-	gettimeofday(&current_time, NULL);
-
-	time_lib->human_readable_time_and_date = asctime(gmtime(&current_time.tv_sec));
-
-	time_lib->milliseconds_time =((current_time.tv_sec)*1000000L+current_time.tv_usec)/1000;
-}

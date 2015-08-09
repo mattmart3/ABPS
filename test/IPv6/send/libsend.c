@@ -111,7 +111,7 @@ int create_ipv6_socket(char *address, int port, int *file_descriptor, struct soc
     
     /* Probably this is not the proper way. */
     
-    destination_address->sin6_scope_id = if_nametoindex("wlan0");
+    destination_address->sin6_scope_id = if_nametoindex("wlan2");
     
     
     /* configuring the socket */
@@ -135,7 +135,7 @@ int create_ipv6_socket(char *address, int port, int *file_descriptor, struct soc
 }
 
 
-int instantiate_ipv4_shared_instance_by_address_and_port(char *address, int port)
+int instantiate_ipv4_shared_instance(char *address, int port)
 {
     int error;
     
@@ -147,7 +147,7 @@ int instantiate_ipv4_shared_instance_by_address_and_port(char *address, int port
 }
 
 
-int instantiate_ipv6_shared_instance_by_address_and_port(char *address, int port)
+int instantiate_ipv6_shared_instance(char *address, int port)
 {
     int error;
     

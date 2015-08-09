@@ -361,10 +361,8 @@ int ipv6_receive_error_message_wait(int descriptor, ErrMsg *em)
 		iov->iov_len = sizeof(em->errmsg);
 		em->msg->msg_control = em->control;
 		em->msg->msg_controllen = sizeof(em->control);
-
-		return_value = recvmsg(descriptor, em->msg, MSG_ERRQUEUE);
+		return_value = recvmsg(descriptor, em->msg, MSG_ERRQUEUE); 
 		em->myerrno=errno;
-
 	} while ((return_value < 0) && ((em->myerrno == EINTR) || (em->myerrno == EAGAIN)));
 
 	if(return_value < 0)

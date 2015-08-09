@@ -243,6 +243,7 @@ int ipv4_receive_error_message_wait(int descriptor, ErrMsg *em)
         em->myerrno=errno;
         
     } while ((return_value < 0) && ((em->myerrno == EINTR) || (em->myerrno == EAGAIN)));
+		
     
     if(return_value < 0)
     {

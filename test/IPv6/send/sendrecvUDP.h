@@ -17,7 +17,6 @@
 #include <linux/errqueue.h>
 #include <errno.h>
 
-
 #define SOCKET_ERROR   ((int)-1)
 
 #define SIZEBYTE 70000
