@@ -16,9 +16,9 @@ struct ted_info_s {
 	uint32_t msg_id;
 	uint8_t retry_count;
 	uint8_t status;
-	/*uint16_t frag_length;
+	uint16_t frag_length;
 	uint16_t frag_offset;
-	uint8_t more_frag;*/
+	uint8_t more_frag;
 	uint8_t ip_vers;
 };
 

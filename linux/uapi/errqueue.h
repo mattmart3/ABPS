@@ -32,33 +32,24 @@ struct sock_extended_err {
 
 /* TED convenient wrapper APIs for First-hop Transmission Notification. */
 
-/* Transmission Error Notification identifier 
- * of the datagram whose notification refers to. */
-#define ted_msg_id(notification) \
-	((struct sock_extended_err *) notification)->ee_info
+/* Transmission Error Notification identifier of the datagram whose notification refers to. */
+#define ted_message_identifier_from_notification(notification)   ((struct sock_extended_err *) notification)->notification_info
 
-/* Message status to the first hop.
- * Return 1 if the message was successfully delivered to the AP, 0 otherwise. */
-#define ted_status(notification) \
-	((struct sock_extended_err *) notification)->ee_type
+/* Message status to the first hop. Return 1 if the message was successfully delivered to the AP, 0 otherwise. */
+#define ted_message_status_from_notification(notification)  ((struct sock_extended_err *) notification)->notification_type
 
-/* Returns the number of times that the packet, 
- * associated to the notification provided, was retrasmitted to the AP.  */
-#define ted_retry_count(notification) \
-	((struct sock_extended_err *) notification)->ee_retry_count
+/* Returns the number of times that the packet, associated to the notification provided, was retrasmitted to the AP.  */
+#define ted_message_retry_count_from_notification(notification) ((struct sock_extended_err *) notification)->notification_retry_count
 
 /* Returns the fragment length */
-#define ted_fragment_length(notification) \
-	(((struct sock_extended_err *) notification)->ee_data >> 16)
+#define ted_message_fragmentation_length_info_from_notification(notification)   (((struct sock_extended_err *) notification)->notification_data >> 16)
 
-/* Returns the offset of the current message 
- * associated with the notification from the original message. */
-#define ted_fragment_offset(notification) \
-	((((struct sock_extended_err *) notification)->ee_data << 16) >> 16)
+/* Returns the offset of the current message associated with the notification from the original message. */
+#define ted_message_fragmentation_offset_info_from_notification(notification)   ((((struct sock_extended_err *) notification)->notification_data << 16) >> 16)
 
 /* Indicates if there is more fragment with the same TED identifier */
-#define ted_more_fragment(notification) \
-	((struct sock_extended_err *) notification)->ee_code
+#define ted_message_more_fragment_info_from_notification ((struct sock_extended_err *) notification)->notification_code
+
 
 /**
  *	struct scm_timestamping - timestamps exposed through cmsg

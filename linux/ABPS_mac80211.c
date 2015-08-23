@@ -320,18 +320,15 @@ static int ipv6_get_udp_info(struct sk_buff *skb, unsigned char *payload, int da
 
     struct udphdr *payload_udphdr;
     
-    struct frag_hdr *header_fragment;
-    struct frag_hdr _header_fragment;
+    struct frag_hdr *fh;
+    struct frag_hdr _frag;
     
     int result_value;
+    int hdr_flags;
+    unsigned int hdr_offset = 0;
     
-    unsigned int pointer = 0;
+    unsigned short fragoff = 0;
     
-    unsigned short frag_offset;
-    
-    
-    
-    int flags = 0;
     
     if(data_length < sizeof(struct ipv6hdr))
     {
@@ -363,7 +360,7 @@ static int ipv6_get_udp_info(struct sk_buff *skb, unsigned char *payload, int da
     /* analyze extension header for fragmentation */
     printk(KERN_NOTICE "search for extension \n");
     
-    if(payload_iphdr->nexthdr == NEXTHDR_FRAGMENT)
+   /* if(payload_iphdr->nexthdr == NEXTHDR_FRAGMENT)
     {
         header_fragment = (struct frag_hdr *) (payload + sizeof(struct ipv6hdr));
         
@@ -371,17 +368,23 @@ static int ipv6_get_udp_info(struct sk_buff *skb, unsigned char *payload, int da
         
         printk(KERN_NOTICE "fragmentantion %d \n", (ntohs(header_fragment->frag_off & htons(IP6_OFFSET)))<<3);
         
-    }
+    }*/
     
-    
-    result_value = ipv6_find_hdr(skb, &pointer, IPPROTO_FRAGMENT, NULL, NULL);
+
+    /* TODO: use a modified version of ipv6_find_hdr in order to get the hdr_offset also in non-1st fragment case */
+    result_value = ipv6_find_hdr(skb, &hdr_offset, NEXTHDR_FRAGMENT, &fragoff, NULL);
     if(result_value < 0)
     {
-        printk(KERN_NOTICE "Transmission Error Detector goes wrong getting next header %d \n",result_value);
+        printk(KERN_NOTICE "TED goes wrong getting next header %d \n",result_value);
     }
-    
-    header_fragment = skb_header_pointer(skb, pointer, sizeof(_header_fragment), &_header_fragment);
-    if(header_fragment)
+   
+    if (fragoff) {
+    	printk(KERN_NOTICE "TED FRAGOFF %04X ", fragoff);
+    }
+
+    //TODO: check how to properly use this function and get the right fields. frag_off ?
+    fh = skb_header_pointer(skb, hdr_offset, sizeof(_frag), &_frag);
+    if(fh)
     {
         printk(KERN_NOTICE "header is not null \n");
     }
@@ -390,7 +393,15 @@ static int ipv6_get_udp_info(struct sk_buff *skb, unsigned char *payload, int da
         printk(KERN_NOTICE "header is null \n");
     }
     
+	printk(KERN_NOTICE "TED FRAG INFO %04X ", fh->frag_off);
+	printk(KERN_NOTICE "TED FRAG OFFSET %04X ", ntohs(fh->frag_off) & ~0x7);
+	printk(KERN_NOTICE "TED FRAG RES %02X %04X", fh->reserved, ntohs(fh->frag_off) & 0x6);
+	printk(KERN_NOTICE "TED FRAG MF %04X ", fh->frag_off & htons(IP6_MF));
+
     
+	printk(KERN_NOTICE "TED FRAG ID %u %08X\n", ntohl(fh->identification),
+		 ntohl(fh->identification));
+
     return 1;
 }
 

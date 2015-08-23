@@ -28,16 +28,13 @@
 /* Get TED information of an error message */
 void __get_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info) 
 {
-
 	ted_info->ip_vers = emsg->c->cmsg_level;
 	ted_info->msg_id = ted_msg_id(emsg->ee);
 	ted_info->retry_count = ted_retry_count(emsg->ee);
 	ted_info->status  = ted_status(emsg->ee);
-	//uint8_t more_frag = emsg->ee->ee_code;
-	//uint16_t frag_len = (emsg->ee->ee_data >> 16);
-	//uint16_t offset = ((emsg->ee->ee_data << 16) >> 16);
-	//
-	/* TODO: check fragment_offset and more_fragment */
+	ted_info->more_frag = ted_more_fragment(emsg->ee);
+	ted_info->frag_length = ted_fragment_length(emsg->ee);
+	ted_info->frag_offset = ted_fragment_offset(emsg->ee);	
 }
 
 int tederror_recv_wait(ErrMsg *em)

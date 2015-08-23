@@ -30,7 +30,7 @@ OPTIONS:\n\
                                   Interface argument MUST be specified (-i).\n\
     -i, --iface=NIC_NAME      Declare the network interface associated\n\
                                   to the specified ip address.\n\
-    -n, --npkts=N_PKTS     Specify how many packets must be sent.\n\
+    -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
     -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n\
     -p, --path=logfile        Specify a log file path.\n\
     -t, --type=TEST_TYPE      Declare the type of the \n\
@@ -116,13 +116,12 @@ int main(int argc, char **argv)
 
 		printf("Sent packet with identifier %d.\n", identifier);
 
-		/* Log packet just sent. */
+		/* Mark the packet just sent to be logged later. */
 		logger_mark_sent_pkt(identifier, logid);
 
 
 		ErrMsg *error_message = alloc_init_ErrMsg();
-		if(tederror_recv_wait(error_message))
-		{
+		if (tederror_recv_wait(error_message)) {
 			struct ted_info_s ted_info;
 			
 			/* Application does not use local notification info. */
@@ -131,13 +130,10 @@ int main(int argc, char **argv)
 			printf("Received notification for packet %d \n",
 			       ted_info.msg_id);
 
-			if (ted_info.status)
-				printf("packet with identifier %d is acked \n",
-			               ted_info.msg_id);
-			
-			else
-				printf("packet with identifier %d is not acked \n",
-				       ted_info.msg_id);
+			printf("msg_id: %d, retry_count: %d, acked: %d\n"
+			       "more_frag: %d, frag_length: %d, frag_offset: %d\n",
+			       ted_info.msg_id, ted_info.retry_count, ted_info.status,
+			       ted_info.more_frag, ted_info.frag_length, ted_info.frag_offset);
 
 			log_notification(&ted_info, logid);
 		}
