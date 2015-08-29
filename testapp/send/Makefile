@@ -2,8 +2,7 @@ CFLAGS=-Wall -o
 CC=gcc
 
 all:
-	$(CC) $(CFLAGS) sendclientapp utils.c libsend.c tederror.c logger.c sendclientapp.c -ljson-c
-	
+	$(CC) $(CFLAGS) sendclientapp utils.c network.c tederror.c sendclientapp.c 
 
 clean: 
 	@rm -rfv *.o *.so *.so*

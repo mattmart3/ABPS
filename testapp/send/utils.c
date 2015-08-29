@@ -27,19 +27,6 @@ void utils_exit_error(const char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
-/* TODO: move to logger file */
-FILE *open_logfile(char *path)
-{
-	FILE *f;
-
-	f = fopen(path, "r+");
-
-	if (f == NULL && errno == ENOENT) 
-		f = fopen(path, "w+");
-
-	return f;
-
-}
 
 /* Init default configuration */
 void utils_default_conf(void)
@@ -47,10 +34,8 @@ void utils_default_conf(void)
 	conf.ip_vers = IPPROTO_IP;
 	conf.n_packets = DEFAULT_N_PACKETS; 
 	conf.msg_length = DEFAULT_MSG_LENGTH;
-	conf.test_type = DEFAULT_TEST_TYPE;
 	conf.iface_name = NULL;
 	conf.iface_name_length = 0;
-	conf.logfile = NULL;
 }
 
 int utils_get_opt(int argc, char **argv) 
@@ -67,12 +52,10 @@ int utils_get_opt(int argc, char **argv)
 			{ "iface", required_argument, 0, 'i'},
 			{ "npkts", required_argument, 0, 'n'},
 			{ "size", required_argument, 0, 's'},
-			{ "path", required_argument, 0, 'p' },
-			{ "type", required_argument, 0, 't'},
 			{ 0, 0, 0, 0 },
 		};
 
-		c = getopt_long(argc, argv, "h6i:n:s:p:t:",
+		c = getopt_long(argc, argv, "h6i:n:s:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -92,17 +75,6 @@ int utils_get_opt(int argc, char **argv)
 				break;
 			case 's':
 				conf.msg_length = atoi(optarg);
-				break;
-			case 'p':
-				conf.logfile = open_logfile(optarg);
-	
-				if (conf.logfile == NULL) {
-					utils_print_error("%s: can't open log file", __func__);
-					return -1;
-				}
-				break;
-			case 't':
-				conf.test_type = atoi(optarg);
 				break;
 			case 'h':
 			default:

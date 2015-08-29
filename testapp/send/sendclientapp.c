@@ -12,15 +12,14 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
-#include <json-c/json.h>
 
-#include "libsend.h"
+#include "network.h"
 #include "tederror.h"
 #include "utils.h"
 #include "structs.h"
 #include "consts.h"
-#include "logger.h"
 
 
 #define USAGE "[OPTIONS] ADDRESS PORT\n\n\
@@ -31,33 +30,96 @@ OPTIONS:\n\
     -i, --iface=NIC_NAME      Declare the network interface associated\n\
                                   to the specified ip address.\n\
     -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
-    -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n\
-    -p, --path=logfile        Specify a log file path.\n\
-    -t, --type=TEST_TYPE      Declare the type of the \n\
-                                  running test (default 0).\n"
+    -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n"
 
-const char * new_json_msg(int logid, char *msg_content)
+
+int epoll_init(int sd)
 {
-	const char *str;
-	json_object *object = json_object_new_object();
+	int epollfd;
+	struct epoll_event ev;
 
-	json_object *test_identifier = json_object_new_int(logid);
-	json_object *message_content = json_object_new_string(msg_content);
+	epollfd = epoll_create1(0);
+	if (epollfd == -1) 
+		return -1;
 
-	json_object_object_add(object,"testIdentifier", test_identifier);
-	json_object_object_add(object, "messageContent", message_content);
+	ev.events = (EPOLLOUT | EPOLLERR | EPOLLET);
+	ev.data.fd = net_get_shared_descriptor(); 
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1)
+		return -1;
 
-	str = json_object_to_json_string(object);
-	free(object);
-
-	return str;
+	return epollfd;
 }
+
+/* Compose a new simple message of a fixed size. */
+char * new_msg(void)
+{
+	char *content;
+
+	/* Init the message content space */
+	content = (char *)malloc(conf.msg_length * sizeof(char));
+	if (content == NULL)
+		utils_exit_error("%s: malloc failed", __func__);
+
+	/* Fill the message content */
+	memset(content, 'c', conf.msg_length - 1);
+	content[conf.msg_length - 1] = '\0';
+
+	return content;
+}
+
+/* Send a new message requesting an identifier for TED. Check net_sendmsg(). */
+void send_new_msg()
+{
+	uint32_t identifier;
+	char *buffer;
+
+	/* Compose a new message and sent it */
+	buffer = new_msg();
+	net_sendmsg(buffer, strlen(buffer), &identifier);
+	printf("-----------------------------------------------------"
+	       "----------------\n Sent pkt ID: %d\nsize: %ld\n", 
+	       identifier, strlen(buffer));
+
+	free(buffer);
+}
+
+/* Receive all the ted notification error that are pending in the errqueue */
+void recv_ted_errors()
+{
+	ErrMsg *error_message = alloc_init_ErrMsg();
+
+	/* Receive all the notifications in the errqueue.
+	 * tederror_recv_nowait returns false if the errqueue is empty. */
+	while (tederror_recv_nowait(error_message)) {
+		struct ted_info_s ted_info;
+
+		/* Application does not use local notification info. */
+		tederror_check_ted_info(error_message, &ted_info);
+
+		printf("-------------------------------------------------"
+		       "--------------------\n\t\t\tTED notified ID: %d \n",
+		       ted_info.msg_id);
+
+		printf("\t\t\tmsg_id: %d, retry_count: %d, acked: %d\n"
+		       "\t\t\tmore_frag: %d, frag_len: %d, frag_off: %d\n",
+		       ted_info.msg_id, ted_info.retry_count, ted_info.status,
+		       ted_info.more_frag, ted_info.frag_length, ted_info.frag_offset);
+
+	}	
+
+	free(error_message);
+
+}
+
 
 int main(int argc, char **argv)
 {
 
 	char *usage, *address;
 	int port;
+	int i, idx; 
+	int epollfd, nfds;
+	struct epoll_event events[MAX_EPOLL_EVENTS];
 
 	asprintf(&usage, "Usage: %s %s", basename(argv[0]), USAGE);
 	
@@ -80,66 +142,43 @@ int main(int argc, char **argv)
 
 	free(usage);
 
-	int index;
-
 	if (conf.ip_vers == IPPROTO_IPV6) 
 		net_init_ipv6_shared_instance(conf.iface_name, address, port);
 	else 
 		net_init_ipv4_shared_instance(address, port);
 
-	logger_init_json();
 
-	for(index = 0; index < conf.n_packets; index++)
-	{
-		int logid; 
-		uint32_t identifier;
-		char *content;
-		const char *buffer;
+	/* Init epoll for handling events of the shared socket descriptor */
+	epollfd = epoll_init(net_get_shared_descriptor());
+	if (epollfd == -1)
+		utils_exit_error("init epoll failed on sd");
+	
+	idx = 0;
+	/* Main epoll loop. Wait for events on the socket descriptor.
+	 * If an EPOLLOUT event is triggered a new message can be sent.
+	 * If an EPOLLERR event is triggered some ted error message 
+	 * may be present in the errqueue. */
+	for (;;) {
 
-		logid = logger_get_logid();
+		nfds = epoll_wait(epollfd, events, MAX_EPOLL_EVENTS, -1);
+		if (nfds == -1)
+			utils_exit_error("epoll_wait error\n");
 		
-		/* Init the message content space */
-		content = (char *)malloc(conf.msg_length * sizeof(char));
-		if (content == NULL) 
-			utils_exit_error("%s: malloc failed", __func__);
+		for (i = 0; i < nfds; i++) {
 
-		/* Fill the message content */
-		memset(content, 'c', conf.msg_length - 1);
-		content[conf.msg_length - 1] = '\0';
-		
-		/* Wrap the message in a json structure */
-		buffer = new_json_msg(logid, content);
+			/* Send a new message if the socket is ready for writing */
+			if (events[i].events & EPOLLOUT && idx < conf.n_packets) {
+				send_new_msg();
+				idx++;
+			}
 
-		printf("\nlength: %lu, logid: %d  \n", strlen(buffer), logid);	
+			/* If there are pending TED error messages 
+			 * in the errqueue, receive them and print TED infos. */
+			if (events[i].events & EPOLLERR) {
+				recv_ted_errors();
+			}
 
-		net_sendmsg(buffer, strlen(buffer), &identifier);
-
-		printf("Sent packet with identifier %d.\n", identifier);
-
-		/* Mark the packet just sent to be logged later. */
-		logger_mark_sent_pkt(identifier, logid);
-
-
-		ErrMsg *error_message = alloc_init_ErrMsg();
-		if (tederror_recv_wait(error_message)) {
-			struct ted_info_s ted_info;
-			
-			/* Application does not use local notification info. */
-			tederror_check_ted_info(error_message, &ted_info);
-
-			printf("Received notification for packet %d \n",
-			       ted_info.msg_id);
-
-			printf("msg_id: %d, retry_count: %d, acked: %d\n"
-			       "more_frag: %d, frag_length: %d, frag_offset: %d\n",
-			       ted_info.msg_id, ted_info.retry_count, ted_info.status,
-			       ted_info.more_frag, ted_info.frag_length, ted_info.frag_offset);
-
-			log_notification(&ted_info, logid);
 		}
-
-		free(content);
-		free(error_message);
 	}
 
 	net_release_shared_instance();

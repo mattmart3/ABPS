@@ -1,5 +1,4 @@
 //
-//  testlib.c
 //  
 //
 //  Created by Gabriele Di Bernardo on 13/05/15.
@@ -20,7 +19,7 @@
 #include <json-c/json.h>
 #include <string.h>
 
-#include "libsend.h"
+#include "network.h"
 #include "utils.h"
 #include "structs.h"
 
@@ -37,7 +36,7 @@ void __get_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info)
 	ted_info->frag_offset = ted_fragment_offset(emsg->ee);	
 }
 
-int tederror_recv_wait(ErrMsg *em)
+int tederror_recv_nowait(ErrMsg *em)
 {
 	struct iovec iov[1];
 	int return_value, ip_vers, shared_descriptor;
@@ -90,14 +89,13 @@ int tederror_recv_wait(ErrMsg *em)
 		iov->iov_len = sizeof(em->errmsg);
 		em->msg->msg_control = em->control;
 		em->msg->msg_controllen = sizeof(em->control);
-		return_value = recvmsg(shared_descriptor, em->msg, MSG_ERRQUEUE); 
+		return_value = recvmsg(shared_descriptor, em->msg, MSG_ERRQUEUE | MSG_DONTWAIT); 
 		em->myerrno=errno;
-	} while ((return_value < 0) && ((em->myerrno == EINTR) || (em->myerrno == EAGAIN)));
+	} while ((return_value < 0) && ((em->myerrno == EINTR)));
 
 	if(return_value < 0) {
 		if (em->myerrno == EAGAIN) {
 			/* No message available on error queue. */
-			printf("recvmsg: EAGAIN\n");
 			return 0;
 		} else {
 			errno = em->myerrno;

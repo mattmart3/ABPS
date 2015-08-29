@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "libsend.h"
+#include "network.h"
 #include "utils.h"
 #include "consts.h"
 
@@ -47,9 +47,6 @@ int __create_ipv4_socket(char *address, int port, int *file_descriptor,
 {
 	int error, option_value;
 
-	struct sockaddr_in local_address;
-
-
 	/* get datagram socket */
 	*file_descriptor = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -58,11 +55,6 @@ int __create_ipv4_socket(char *address, int port, int *file_descriptor,
 		                  __func__, strerror(errno));
 		return errno;
 	}
-
-	local_address.sin_family = AF_INET;
-	local_address.sin_addr.s_addr = htonl(INADDR_ANY);
-	local_address.sin_port = htons(0);
-
 
 	/* prepare destination sockaddr_in */
 	destination_address->sin_family = AF_INET;
@@ -103,10 +95,7 @@ int __create_ipv6_socket(char *ifname, char *address,
 {
 	int error, option_value;
 
-	struct sockaddr_in6 local_address;
-
 	/* get datagram socket */
-
 	*file_descriptor = socket(AF_INET6, SOCK_DGRAM, 0);
 	
 	if (*file_descriptor == SOCKET_ERROR) {
@@ -115,13 +104,7 @@ int __create_ipv6_socket(char *ifname, char *address,
 		return errno;
 	}
 
-	local_address.sin6_family = AF_INET6;
-	local_address.sin6_addr = in6addr_any;
-	local_address.sin6_port = htons(0);
-
-
 	/* prepare destination sockaddr_in */
-
 	destination_address->sin6_family = AF_INET6;
 	inet_pton(AF_INET6, address, &(destination_address->sin6_addr));
 	destination_address->sin6_port = htons(port);

@@ -1,0 +1,16 @@
+- Create an hashtable of structs of sent packets info where the key is the kernel generated id (check glib_hash_table)
+- For each fragment TED notification received, add in the hastable sent packet structs the fragment info (appending to a list)
+- If the adding fragment has more_frag set to 0 try to recompose the original message. 
+- The recompose function sorts the fragment list by frag_off, check if the last has no more_frag and if the total sum (plus udp header) 
+is the same of the corresponding sent packet.
+- If the recompose succeeds, avg info are calculated and the sent packet struct will be removed from the hashtable.
+- Periodically try to recompose the remaing packets of the hashtable and delete those too old summarizing the current information.
+
+hashtable:
+	sentpkt 1
+		(frag1 frag2 ... fragn)
+	sentpkt 2
+		(frag1 frag2 ... fragn)
+	...
+	sentpkt 10
+		(frag1 frag2 ... fragn)

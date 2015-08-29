@@ -1,5 +1,5 @@
-#ifndef LIBSEND_H
-#define LIBSEND_H
+#ifndef NETWORK_H
+#define NETWORK_H
 
 #include <unistd.h>
 #include <stdlib.h>
