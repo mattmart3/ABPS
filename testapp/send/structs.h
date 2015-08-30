@@ -18,7 +18,15 @@ struct ted_info_s {
 	uint16_t frag_offset;
 	uint8_t more_frag;
 	uint8_t ip_vers;
+	char *msg_pload;
 };
 
-
+struct msg_info_s {
+	int size;
+	uint32_t id;
+	/* TODO time */
+	struct ted_info_s *frags[MAX_FRAGS];
+	int n_frags;
+	short int last_frag_received;
+};
 #endif

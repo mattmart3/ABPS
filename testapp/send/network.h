@@ -15,6 +15,8 @@
 #include <linux/errqueue.h>
 #include <errno.h>
 
+#include "consts.h"
+
 #define SOCKET_ERROR   ((int)-1)
 
 #define SIZEBYTE 70000
@@ -50,7 +52,7 @@ typedef struct struct_errormessage
 
 	int	len_control;
 
-	char errmsg[64 + 768];
+	char errmsg[MSGERR_BUFF_LEN];//[64 + 768];
 
 	int	len_errmsg;
 

@@ -34,14 +34,26 @@ void __get_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info)
 	ted_info->more_frag = ted_more_fragment(emsg->ee);
 	ted_info->frag_length = ted_fragment_length(emsg->ee);
 	ted_info->frag_offset = ted_fragment_offset(emsg->ee);	
+	ted_info->msg_pload = emsg->errmsg;
 }
 
-int tederror_recv_nowait(ErrMsg *em)
+int tederror_recv_nowait(ErrMsg **error_message)
 {
-	struct iovec iov[1];
+	
 	int return_value, ip_vers, shared_descriptor;
 
 	struct sockaddr *addr;
+	struct iovec iov[1];
+	ErrMsg *em;
+
+
+	*error_message = alloc_init_ErrMsg();	
+	em = *error_message;
+
+	iov[0].iov_base = em->errmsg;
+	iov[0].iov_len = sizeof(em->errmsg);
+
+
 
 	if ((ip_vers = net_check_ip_instance_and_version()) == -1)
 		return -1;
@@ -85,39 +97,45 @@ int tederror_recv_nowait(ErrMsg *em)
 		em->msg->msg_namelen = sizeof(em->name);
 		em->msg->msg_iov = iov;
 		em->msg->msg_iovlen = 1;
-		iov->iov_base = em->errmsg;
-		iov->iov_len = sizeof(em->errmsg);
 		em->msg->msg_control = em->control;
 		em->msg->msg_controllen = sizeof(em->control);
 		return_value = recvmsg(shared_descriptor, em->msg, MSG_ERRQUEUE | MSG_DONTWAIT); 
 		em->myerrno=errno;
 	} while ((return_value < 0) && ((em->myerrno == EINTR)));
 
+	int ret;
+	ret = 0;
+
 	if(return_value < 0) {
 		if (em->myerrno == EAGAIN) {
 			/* No message available on error queue. */
-			return 0;
+			ret = 0;
 		} else {
 			errno = em->myerrno;
 			utils_print_error("%s: recvmsg failed with error (%s).\n",
-			                  __func__, strerror(errno));
-			return -1;
+					__func__, strerror(errno));
+		 	ret = -1;
 		}
+	} else if ((em->msg->msg_flags & MSG_ERRQUEUE) != MSG_ERRQUEUE) {
+
+		printf("recvmsg: no errqueue\n");
+		ret =  0;
+
+	} else if (em->msg->msg_flags & MSG_CTRUNC) {
+
+		printf("recvmsg: extended error was truncated\n");
+		ret = 0;
+
 	} else {
-		if ((em->msg->msg_flags & MSG_ERRQUEUE) != MSG_ERRQUEUE) {
-
-			printf("recvmsg: no errqueue\n");
-			return 0;
-
-		} else if (em->msg->msg_flags & MSG_CTRUNC) {
-
-			printf("recvmsg: extended error was truncated\n");
-			return 0;
-
-		} else {
-			return 1; // read, ok
-		}
+		/* XXX: empty payload comes from here */
+		printf("%d ,buffer: %s\n", return_value, em->errmsg);
+		ret = 1; // read, ok
 	}
+
+	if (ret <= 0) 
+		free(em);
+
+	return ret;
 }
 
 int tederror_check_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info)

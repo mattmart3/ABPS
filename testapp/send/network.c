@@ -33,6 +33,7 @@ ErrMsg *alloc_init_ErrMsg(void)
 		return(NULL);
 	} else {
 		memset(&(em->msg),0,sizeof(em->msg));
+		memset(&(em->errmsg),0,sizeof(em->errmsg));
 		em->lenrecv=0;
 		em->myerrno=0;
 

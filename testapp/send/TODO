@@ -8,9 +8,12 @@ is the same of the corresponding sent packet.
 
 hashtable:
 	sentpkt 1
-		(frag1 frag2 ... fragn)
+		(frag1 frag4 ... fragn)  #When the list is complete and the sizes are same it can be deleted
 	sentpkt 2
-		(frag1 frag2 ... fragn)
+		(frag2 frag1 ... fragn)
 	...
 	sentpkt 10
-		(frag1 frag2 ... fragn)
+		(frag6 fragn ... frag4)
+	...
+	sentpkt n
+		(fragn frag5 ... frag2) 
