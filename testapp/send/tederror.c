@@ -128,7 +128,7 @@ int tederror_recv_nowait(struct err_msg_s **error_message)
 
 	do
 	{
-		/*XXX: name can be omitted for local error msg (see man) */
+		/*XXX: name can be omitted (NULL) for local error msg (see man) */
 		memset(&(em->msg),0,sizeof(em->msg));
 		em->msg->msg_name = &(em->name);
 		em->msg->msg_namelen = sizeof(em->name);
@@ -165,7 +165,7 @@ int tederror_recv_nowait(struct err_msg_s **error_message)
 
 	} else {
 		/* XXX: empty payload comes from here */
-		printf("%d ,buffer: %s\n", return_value, em->errmsg);
+		//printf("%d ,buffer: %s\n", return_value, em->errmsg);
 		ret = 1; // read, ok
 	}
 
