@@ -3,14 +3,26 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
-#include "network.h"
 #include "utils.h"
 #include "consts.h"
+
+#define HAVE_IP_RECVERR 1
+
+#if HAVE_IP_RECVERR
+
+	#include <sys/uio.h>
+#else
+	#warning "HAVE_IP_RECVERR not defined"
+	printf ("setsockopt() IP_PROTO IP_RECVERR not defined\n");
+#endif
+
 
 int shared_descriptor;
 
@@ -23,23 +35,6 @@ int is_shared_instance_ipv6;
 struct sockaddr_in ipv4_dest_addr;
 
 struct sockaddr_in6 ipv6_dest_addr;
-
-ErrMsg *alloc_init_ErrMsg(void)
-{
-	ErrMsg *em;
-	em = (ErrMsg*) malloc(sizeof(ErrMsg));
-	
-	if(em == NULL) {
-		return(NULL);
-	} else {
-		memset(&(em->msg),0,sizeof(em->msg));
-		memset(&(em->errmsg),0,sizeof(em->errmsg));
-		em->lenrecv=0;
-		em->myerrno=0;
-
-		return(em);
-	}
-}
 
 /* create IPv4 socket */
 
@@ -199,7 +194,7 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 
 	char ancillary_buffer[CMSG_SPACE(sizeof(id_pointer))];
 
-	struct iovec iov[3];
+	struct iovec iov[1];
 	
 	struct msghdr msg_header;
 		
@@ -246,7 +241,7 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 	msg_header.msg_controllen = cmsg->cmsg_len;
 
 	/* Prepare for sending. */
-	result_value = sendmsg(shared_descriptor, &msg_header, MSG_NOSIGNAL);
+	result_value = sendmsg(shared_descriptor, &msg_header, MSG_NOSIGNAL | MSG_DONTWAIT);
 	if(result_value < 0)
 		utils_print_error("%s: sendmsg error (%s).\n",
 		                  __func__, strerror(errno));

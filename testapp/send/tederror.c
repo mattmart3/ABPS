@@ -10,22 +10,42 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
 #include <inttypes.h>
 #include <linux/errqueue.h>
-#include <json-c/json.h>
+#include <arpa/inet.h>
 #include <string.h>
+#include <stdlib.h>
+#include <errno.h>
 
-#include "network.h"
 #include "utils.h"
+#include "network.h"
 #include "structs.h"
+
+struct err_msg_s *alloc_init_ErrMsg(void)
+{
+	struct err_msg_s *em;
+	em = (struct err_msg_s *) malloc(sizeof(struct err_msg_s));
+
+	if(em == NULL) {
+		return(NULL);
+	} else {
+		memset(&(em->msg),0,sizeof(em->msg));
+		memset(&(em->errmsg),0,sizeof(em->errmsg));
+		em->lenrecv=0;
+		em->myerrno=0;
+
+		return(em);
+	}
+}
 
 
 /* Get TED information of an error message */
-void __get_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info) 
+void __get_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info) 
 {
 	ted_info->ip_vers = emsg->c->cmsg_level;
 	ted_info->msg_id = ted_msg_id(emsg->ee);
@@ -37,14 +57,14 @@ void __get_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info)
 	ted_info->msg_pload = emsg->errmsg;
 }
 
-int tederror_recv_nowait(ErrMsg **error_message)
+int tederror_recv_nowait(struct err_msg_s **error_message)
 {
 	
 	int return_value, ip_vers, shared_descriptor;
 
 	struct sockaddr *addr;
 	struct iovec iov[1];
-	ErrMsg *em;
+	struct err_msg_s *em;
 
 
 	*error_message = alloc_init_ErrMsg();	
@@ -92,6 +112,7 @@ int tederror_recv_nowait(ErrMsg **error_message)
 
 	do
 	{
+		/*XXX: name can be omitted for local error msg (see man) */
 		memset(&(em->msg),0,sizeof(em->msg));
 		em->msg->msg_name = &(em->name);
 		em->msg->msg_namelen = sizeof(em->name);
@@ -106,7 +127,7 @@ int tederror_recv_nowait(ErrMsg **error_message)
 	int ret;
 	ret = 0;
 
-	if(return_value < 0) {
+	if (return_value < 0) {
 		if (em->myerrno == EAGAIN) {
 			/* No message available on error queue. */
 			ret = 0;
@@ -138,7 +159,7 @@ int tederror_recv_nowait(ErrMsg **error_message)
 	return ret;
 }
 
-int tederror_check_ted_info(ErrMsg *emsg, struct ted_info_s *ted_info)
+int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 {
 	/* For each error header of the previuosly sent message, 
 	 * look for TED notifications. */

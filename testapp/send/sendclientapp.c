@@ -15,6 +15,7 @@
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <glib.h>
+#include <unistd.h>
 
 #include "network.h"
 #include "tederror.h"
@@ -177,7 +178,7 @@ void hash_table_remove(struct msg_info_s *msg_origin,
 /* Receive all the ted notification error that are pending in the errqueue */
 void recv_ted_errors(GHashTable *ht)
 {
-	ErrMsg *error_message;
+	struct err_msg_s *error_message;
 
 	/* Receive all the notifications in the errqueue.
 	 * tederror_recv_nowait returns false if the errqueue is empty. */
