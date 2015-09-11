@@ -1,0 +1,65 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{wrapfig}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{bytefield}
+\usepackage{fullpage}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+%opening
+\title{ABPS: TED fragmentation fixing}
+\author{Matteo Martelli}
+
+\begin{document}
+
+\maketitle
+
+
+\section{Nelle puntate precedenti}
+In questo documento si fa riferimento alla modifiche apportate al componente software TED (Transmis-
+sion Error Detector) riguardanti la frammentazione. Per maggiori informazioni su TED e sull’architettura
+Always Best Packet Switching (ABPS) si rimanda alla documentazione
+precedente. %todo ref
+
+Nello specifico TED offre, tramite una struttura cross-layer, un meccanismo in grado di fornire infor-
+mazioni alle applicazioni riguardo l’avvenuta (o mancata) consegna al primo access point dei datagram
+UDP trasmessi.
+
+Quando l’applicazione invia un datagram UDP, TED lo marca con un identificativo user-space acces-
+sibile dall’applicazione. Successivamente ogni frammento datalink spedito dall’interfaccia di rete viene
+associato a quell’identificativo e ad una struttura dati contenenti informazioni sullo stato del frammento.
+Quest’ultime vengono poi integrate con le informazioni riguardanti l’avvenuta o mancata consegna (ACK,
+NACK) del frammento all’access point e il relativo numero di tentativi di consegna.
+
+Nelle versioni precedenti a questa mancava il corretto supporto per la gestione della frammentazione
+in IPv6. Vedremo nella prossima sezione quali modifiche sono state apportate al kernel per il corretto
+funzionamento con la frammentazione in IPv6.
+
+Infine nella sezione \ref{sec:app} vedremo le modifiche apportate all’applicazione per la gestione delle notifiche
+di TED dei datagram frammentati oltre a qualche esempio d’utilizzo.
+
+
+\section{Modifiche Kernel}
+
+
+
+\section{Modifiche Applicazione}
+\label{sec:app}
+\subsection{Gestione Asincrona delle Notifiche}
+%select vs. epoll
+
+\subsection{Gestione della Frammentazione}
+%hashtable, structs, sorting, ricomposizione frammenti
+
+\subsection{Refactoring e Organizzazione}
+%json log buttato, both IP versions, struttura file
+
+\subsection{Utilizzo}
+%usage, esempio invocazione e output
+
+\end{document}

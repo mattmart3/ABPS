@@ -1,0 +1,453 @@
+
+1
+	fisso da solo
+
+2
+	yas, da solo
+
+3
+	yas con pc simo su youtube
+
+4
+
+	
+5
+	rasp:4
+	yas: ~11
+	udoo: server
+
+	yas a udoo, rasp a udoo
+
+
+6:
+	aggiunge toshiba su youtube rispetto a 6
+	da questa forse il rasp non andava più
+
+7
+	aggiunge tablet su youtube
+
+8
+	come 7 ma in mov
+
+9
+	come 6 ma in mov
+
+
+
+
+
+10
+	rasp:0.3
+	yas:24
+	udoo:~10
+	vec: server eth
+	durante i test la udoo dimezza la velocità
+	alle 19.28/19.29 ERRORE!!! ha ricevuto fino al pkt 3975
+
+	Quello che ha finito alle 19.32 era senza file da udoo, ma quello che ha finito ai 33 è andato a manetta cmq
+	attenzione perchè potrebbero sballarmi i dati
+
+
+11
+	come la 10 ma in movimento. Però andava da schifo, ci deve essere stato qualche problema nella connessione
+
+
+12
+	rasp a 0.5
+	udoo 4
+	yas 23	(con chiavetta)
+
+
+13
+	rasp più veloce(?)
+
+
+14
+	yas 23
+	udoo 17
+	rasp 1.7
+
+
+15
+	14 con yas in mov
+	è andato molto veloce
+
+
+
+17
+	test fatto in lab, abbiamo cambiato parecchie cose quindi non guardarlo.
+
+18
+	da solo in lab, con wait
+	pacchetti da 1050
+	NON GUARDARE 
+
+19
+	NON GUARDARE 
+	da solo in lab, con no_wait
+	pkt 1050
+  
+20
+	TEST A CASO
+
+21
+	PKT 1050
+	NO-WAIT
+
+22
+	PKT 1050
+	WAIT
+
+23
+
+	come 22 ma con rasp a circa 70 M
+
+24
+	come 24 ma con rasp a circa 70Ms
+	non cambia un cazzo, mi ero sbagliato
+
+25
+
+	come 24 con rasp a 9 o 10
+
+26
+	no wait rasp a 9 o 10
+
+
+
+27
+	come 26 ma con rasp a 
+
+
+28
+	no wait, rasp a 5
+
+
+
+29
+
+
+	wait rasp a 5
+
+
+
+
+30
+	non guardare
+
+31
+	wait
+	rasp a 70
+	yas senza chiavetta
+
+32
+	non guardare
+
+33
+	in recv non stampo tutto il msg
+
+34
+	non guardare
+
+35
+	rasp a 14 (con tutti collegati) altrimenti sulla quarantina o più (in realtà va un po' come cazzo gli pare)
+	udoo a circa 8, ma anche ad 1,,3,4....
+	va molto molto lento
+	
+
+36
+	come 35,
+	arrivato solo ai primi 61 pacchetti
+	poi 5000
+	poi 2552
+	in mezzo c'è finito anche qualcuno del 37, puttanazza eva ---> cancellarli!!!
+
+37
+	spengo rasp
+	udoo a circa 6
+	va a busso
+
+38
+	rasp acceso
+
+39
+	da solo
+	(controllare che non sia invertito con 38, ma non dovrebbe)
+
+
+40
+	solo 
+	wait
+
+
+41
+	solo
+	no wait
+
+
+42
+	come 41 ma accendo rasp
+	rasp a 60/70
+
+43
+	come 42 ma Wait
+	andava lentino
+
+44 
+	la stessa del 43, volevo vedere se andava più veloce
+
+45
+	aggiunto mac a 80
+
+46
+	uguale a 45 ma no wait
+
+
+
+47
+	ipv4
+	rasp a 40
+	sembra lento
+
+48
+	ipv6, ma senza server
+	rasp a 40
+	vari --> error sending pack
+49
+	
+
+
+
+
+
+
+50
+	rasp
+	no wait
+
+511
+	tnti nack busrt
+	no wait
+	capa + rasp
+
+
+
+
+ora tutte wait
+
+52
+	rasp e cdc
+
+
+53
+	aggiunge mack
+	il primo è andato a fulmine
+
+54
+	come 52
+	buono fino ai 110
+
+55
+	solo rasp
+
+56
+	da solo
+
+
+
+
+57:
+	manca (?)
+
+58:
+	rasp a circa 40 (ma va un po' come cazzo gli pare)
+	manda il suo file (con pkt di 1096) una sola volta
+
+
+59:
+	come 58
+	fino a 600 pkt c'è il rasp a rompere
+	
+60
+	circa 500 pkt
+
+61
+	fino a ~400/450  poi da ~4600
+
+62
+	ho interotto a circa 3800
+	reasp  a 82
+
+
+
+
+
+da qua in poi trasmetto tutti a circa 15Mb/s
+63
+	aggiunta udoo
+	rasp e udoo mandano myFile
+	ora rasp sui 10/20 udoo sui 10
+	
+	solo 17 pkt
+
+64
+	fino a circa 20 pkt entrambi, poi il resto solo rasp
+
+65
+	fino a circa 10 entrambi
+	fino a circa 100/150 rasp
+	resto da solo
+
+66
+	159 entrambi
+	490 rasp
+	resto solo
+67
+	17
+	307
+	resto
+
+
+68
+	2 rasp e udoo che mandano cities1000
+
+	ben 4 pkt
+
+69
+	fino a 2 con tutti
+	da 2 a 8 con due
+	poi il resto penso solo con 1
+
+70
+	al sesto pkt si è inchiodato
+
+71
+	fino a 19 tutti
+	fino  a 29 due
+	poi fino a 300 e qualcosa solo 1
+
+72
+	15
+
+73
+	15 con ttt
+74
+	parto da solo
+	poi da ~540 si attivano gli altri
+
+75
+	solo fino a circa 820
+	poi si attivano due
+	i pkt tra 885 e 890 tutti e tre (forse solo 887 e 888 e 889)
+	poi 2 pkt fino a non so dove (tipo 1200)
+	poi solo
+
+
+
+
+76
+	due rasp e che mandano CN di continuo
+	uno a 20/25, l'atro a 4
+
+
+
+77
+	due rasp che mandano CN, ma non pingano
+	28Mbs e 20Mbs
+
+
+
+
+78
+	yas da solo a ~28
+
+
+79
+	accendo un rasp (a ~50)
+	
+80
+	acceso anche secondo rasp
+	~30 e 20
+	le prestazioni dei rasp sono calate di pochissimo (quasi niente), le mie andate a puttane.
+
+
+81
+	rasp a circa 8
+
+82
+	altro rasp
+	17	8	
+	13 e 1 durante trrasmi
+
+
+
+
+
+
+
+83
+	solo
+	
+
+84
+	solo in movimento
+
+
+-85
+	rasp a 28/30  NEW VAL 12/15
+
+86
+	rasp a 
+	yas in movimento
+
+
+87
+	2 rasp
+	20 e 15 (???????)
+
+88
+	87 in mov
+
+89
+	anche udoo... vel; 9,5,3/4
+	solo
+
+90
+	forse sono troppo lontani e sono morti tutti
+
+
+91
+	boh
+
+
+92
+	solo
+
+93
+	rasp a 31
+
+
+94
+	rasp a 3/5/8
+
+
+95
+	due rasp
+	uno a  30 e l'altro a 20
+
+
+96
+	r1: 3/5/8
+	r2: 27
+
+
+97
+	r1: 
+	r2: 
+
+
+
+98
+	solo ok
+
+
