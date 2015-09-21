@@ -404,7 +404,7 @@ static int ipv6_get_udp_info(struct sk_buff *skb,
 
 	/* Subtract the fragment header size from the ipv6 payload length
 	 * as it is located  just before the fragment 
-	 * (which is optional remaining ipv6 headers + udp header + payload)
+	 * (which is optional remaining ipv6 headers + udp header + msg payload)
 	 *  +------------+---------------------+------------+
 	 *  |  ipv6 hdr  |  ipv6 fragment hdr  |  fragment  |
 	 *  +------------+---------------------+------------+  */

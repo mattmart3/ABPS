@@ -10,13 +10,14 @@
 \usepackage{fullpage}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{bytefield}
 
 %opening
 \title{ABPS: TED fragmentation fixing}
 \author{Matteo Martelli}
 
 \begin{document}
-
+\lstset{language=C}
 \maketitle
 
 
@@ -38,15 +39,170 @@ NACK) del frammento all’access point e il relativo numero di tentativi di cons
 
 Nelle versioni precedenti a questa mancava il corretto supporto per la gestione della frammentazione
 in IPv6. Vedremo nella prossima sezione quali modifiche sono state apportate al kernel per il corretto
-funzionamento con la frammentazione in IPv6.
+funzionamento con la frammentazione in IPv6. Come nella versione
+precedente lo sviluppo è stato continuato per il kernel 4.0.1.
 
 Infine nella sezione \ref{sec:app} vedremo le modifiche apportate all’applicazione per la gestione delle notifiche
 di TED dei datagram frammentati oltre a qualche esempio d’utilizzo.
 
 
 \section{Modifiche Kernel}
+Prima di mostrare le modifiche effettuate nel kernel ricordiamo
+brevemente come sono formati gli header dei pacchetti IPv6.
+
+\subsection{Header IPv6}
+In particolare siamo interessati all'header del pacchetto IP che nella
+versione 6 è composta da un parte fissa (fixed) e una parte variabile
+formata da header opzionali chiamati extension header. \\
+
+La figura \ref{fig:fixedhdr} mostra il formato del fixed header IPv6. 
+
+\begin{figure} [H]
+	\begin{center}
+		\begin{bytefield}[bitwidth=1.1em]{32}
+			\bitheader{0-31}\\
+			
+			\bitbox{4}{Version}
+			\bitbox{8}{Traffic Class}
+			\bitbox{20}{Flow Label}\\
+			
+			\bitbox{16}{Payload Length}
+			\bitbox{8}{Next Header}
+			\bitbox{8}{Hop Limit} \\
+			
+			\wordbox{4}{Source Address} \\
+			\wordbox{4}{Destination Address} \\
+		\end{bytefield}
+		\caption{Formato fixed header IPv6}
+		\label{fig:fixedhdr}
+	\end{center}
+\end{figure}
+
+Notiamo che a differenza dei pacchetti IPv4 non sono presenti i campi
+\emph{Flags} e \emph{Fragment Offset} utilizzati nella versione 4 per
+ottenere informazioni sulla frammentazione. Per tale scopo, in IPv6, bisogna far
+riferimento all'extension header \emph{Fragment}, mostrato in figura
+\ref{fig:fragmenthdr}, nel quale sono
+contenute le informazioni necessarie per riasseblare i pacchetti
+originali.
+
+\begin{figure} [H]
+	\begin{center}
+		\begin{bytefield}[bitwidth=1.1em]{32}
+			\bitheader{0-31}\\
+			
+			\bitbox{8}{Next Header}
+			\bitbox{8}{Reserved}
+			\bitbox{13}{Fragment Offset}
+			\bitbox{2}{Res}
+			\bitbox{1}{M} \\
+
+			\wordbox{1}{Identification} \\
+		\end{bytefield}
+		\caption{Formato fragment extension header IPv6.
+I campi \emph{Res} e
+\emph{Reserved} indicano spazio riservato inizializzato a 0. Il campo
+\emph{M} si riferisce al campo \emph{More Fragment} }
+		\label{fig:fragmenthdr}
+	\end{center}
+\end{figure}
 
 
+Gli extension header sono situati tra il fixed header e gli header dei
+protocolli di livello superiore. Tramite il campo \emph{Next Header} gli header
+formano una catena. In particolare il campo \emph{Next Header} del fixed
+header indica il tipo del primo extension header e il \emph{Next Header}
+dell'ultimo extension header (o del fixed header ove non ci fosse nessun
+extension header) indica il tipo dell'header del protocollo di livello
+superiore (ad esempio TCP o UDP).
+
+\subsection{Frammentazione IPv6 in TED}
+La modifica principale risiede nella funzione
+\texttt{ipv6\_get\_udp\_info} la quale si occupa di recuperare le
+informazioni sul frammento IPv6 del relativo frame 802.11
+ al momento del suo invio.\\
+
+Nella nuova versione si scorre innanzitutto la catena degli header fino
+ad incontrare l'header fragment:
+\begin{lstlisting}
+/* Variables initialization */
+*fragment_offset = *more_fragment = hdrs_len = error = 0;
+nexthdr = ipv6_hdr(skb)->nexthdr;
+target = NEXTHDR_FRAGMENT;
+
+do {
+	struct ipv6_opt_hdr _hdr, *hp;
+	unsigned int hdrlen;
+	found = (nexthdr == target);
+
+	if ((!ipv6_ext_hdr(nexthdr)) || nexthdr == NEXTHDR_NONE) {
+		break;
+	}
+
+	hp = skb_header_pointer(skb, offset, sizeof(_hdr), &_hdr);
+	if (hp == NULL) {
+		error = -EBADMSG;
+		break;
+	}
+
+	if (nexthdr == NEXTHDR_FRAGMENT) {
+		hdrlen = 8;
+	} else if (nexthdr == NEXTHDR_AUTH) {
+		hdrlen = (hp->hdrlen + 2) << 2;
+	} else
+		hdrlen = ipv6_optlen(hp);
+
+	if (!found) {
+		nexthdr = hp->nexthdr;
+		offset += hdrlen;
+	}
+
+	hdrs_len += hdrlen;
+} while (!found);
+\end{lstlisting}
+
+In realtà questa operazione è un
+controllo di sanità in quanto secondo le specifiche dell'RFC 2460 %TODO:ref
+l'header fragment
+dovrebbe essere il diretto successore del fixed header. 
+Ad ogni modo dopo aver indivuato l'header fragment si può accedere alla
+bitmap \texttt{frag\_off} della relativa struttura dati. Tramite la
+bitmap si possono ottenere quindi il campo \emph{Fragment Offset} e il
+campo \emph{More
+Fragment} del frammento:
+
+\begin{lstlisting}
+/* fh is the pointer to the fragment header struct and it is retreived
+according to the offset from the begging of the packet */
+fh = skb_header_pointer(skb, offset, sizeof(_frag), &_frag);
+
+if (fh) {
+	*fragment_offset = ntohs(fh->frag_off) & ~0x7;
+	*more_fragment = ((fh->frag_off & htons(IP6_MF)) > 0);
+} 
+\end{lstlisting}
+ 
+Infine l'ultimo campo che ci interessa ottenere è la lunghezza del
+frammento. La parte frammentabile è tutto quello che segue l'header
+fragment, quindi eventuali altri extension header IPv6, gli header dei
+protocolli dei livelli superiori e il frammento dati del messaggio.
+Bisogna quindi togliere dalla dimensione del frammento indicata dal
+campo \emph{Payload} del fixed header, la dimensione dell'header fragment.
+Questo perchè il campo \emph{Payload} esclude già la dimensione del fixed
+header e perchè l'header fragment è il diretto successore del fixed
+header; inoltre tutto quello che segue va considerato parte del
+frammento\footnote{Sempre per controllo di sanità, viene sotratto al
+payload
+tutto quello che parte dalla fine del fixed header fino alla fine
+dell'header fragment.}:
+
+\begin{lstlisting}
+*fragment_data_length = ntohs(payload_iphdr->payload_len) - hdrs_len;
+\end{lstlisting}
+
+A seguito di queste modiche il kernel con TED abilitato riesce
+correttamente ad ottenere le informazioni sulla frammentazione anche per
+IPv6.
 
 \section{Modifiche Applicazione}
 \label{sec:app}
