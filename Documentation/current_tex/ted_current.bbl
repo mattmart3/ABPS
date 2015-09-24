@@ -1,0 +1,23 @@
+\begin{thebibliography}{1}
+
+\bibitem{polling2}
+{\em select / poll / epoll: practical difference for system architects}, 2014.
+\newblock
+  \url{http://www.ulduzsoft.com/2014/01/select-poll-epoll-practical-difference-for-system-architects}.
+
+\bibitem{rfc2460}
+Stephen~E Deering.
+\newblock Internet protocol, version 6 (ipv6) specification.
+\newblock 1998.
+
+\bibitem{polling1}
+Louay Gammo, Tim Brecht, Amol Shukla, and David Pariag.
+\newblock Comparing and evaluating epoll, select, and poll event mechanisms.
+\newblock In {\em Linux Symposium}, volume~1, 2004.
+
+\bibitem{abps}
+Vittorio Ghini, Giorgia Lodi, and Fabio Panzieri.
+\newblock Always best packet switching: the mobile voip case study.
+\newblock {\em Journal of communications}, 4(9):700--713, 2009.
+
+\end{thebibliography}

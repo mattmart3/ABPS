@@ -1,0 +1,49 @@
+This is BibTeX, Version 0.99d (TeX Live 2015/dev/Debian)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: ted_current.aux
+The style file: plain.bst
+Database file #1: biblio.bib
+Warning--to sort, need author, organization, or key in polling2
+Warning--empty journal in rfc2460
+You've used 4 entries,
+            2118 wiz_defined-function locations,
+            517 strings with 4561 characters,
+and the built_in function-call counts, 1080 in all, are:
+= -- 99
+> -- 49
+< -- 1
++ -- 20
+- -- 16
+* -- 74
+:= -- 184
+add.period$ -- 11
+call.type$ -- 4
+change.case$ -- 19
+chr.to.int$ -- 0
+cite$ -- 6
+duplicate$ -- 43
+empty$ -- 92
+format.name$ -- 16
+if$ -- 220
+int.to.chr$ -- 0
+int.to.str$ -- 4
+missing$ -- 3
+newline$ -- 22
+num.names$ -- 6
+pop$ -- 22
+preamble$ -- 1
+purify$ -- 16
+quote$ -- 0
+skip$ -- 29
+stack$ -- 0
+substring$ -- 45
+swap$ -- 5
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 16
+warning$ -- 2
+while$ -- 8
+width$ -- 5
+write$ -- 41
+(There were 2 warnings)

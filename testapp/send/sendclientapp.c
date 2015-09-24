@@ -161,7 +161,6 @@ int try_recompose(struct msg_info_s *msg_origin)
 
 	}
 	
-	/* TODO: check the payload hash too. */
 	if (tot_len != msg_origin->size + UDP_HEADER_SIZE) {
 		printf("recomposition failed.\n");
 		return 0;
@@ -205,7 +204,6 @@ void recv_ted_errors(GHashTable *ht)
 		if (ted_info == NULL) 
 			utils_exit_error("malloc error in %s\n", __func__);
 
-		/* Application does not use local notification info. */
 		tederror_check_ted_info(error_message, ted_info);
 
 		printf("-------------------------------------------------"
@@ -217,7 +215,6 @@ void recv_ted_errors(GHashTable *ht)
 		       ted_info->msg_id, ted_info->retry_count, ted_info->status,
 		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
 
-		//printf("XXX %s\n", ted_info->msg_pload);
 		key = g_new0(gint, 1);
 		*key = ted_info->msg_id;
 
