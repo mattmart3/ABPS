@@ -72,7 +72,8 @@ void gen_random(char *s, const int len) {
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		"abcdefghijklmnopqrstuvwxyz";
 
-	for (int i = 0; i < len; ++i) {
+	int i;
+	for (i = 0; i < len; ++i) {
 		s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
 	}
 

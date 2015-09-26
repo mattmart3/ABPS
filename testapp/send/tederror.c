@@ -164,8 +164,6 @@ int tederror_recv_nowait(struct err_msg_s **error_message)
 		ret = 0;
 
 	} else {
-		/* XXX: empty payload comes from here */
-		//printf("%d ,buffer: %s\n", return_value, em->errmsg);
 		ret = 1; // read, ok
 	}
 
