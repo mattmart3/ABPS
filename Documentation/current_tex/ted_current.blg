@@ -5,45 +5,45 @@ The style file: plain.bst
 Database file #1: biblio.bib
 Warning--to sort, need author, organization, or key in polling2
 Warning--empty journal in rfc2460
-You've used 4 entries,
+You've used 6 entries,
             2118 wiz_defined-function locations,
-            517 strings with 4561 characters,
-and the built_in function-call counts, 1080 in all, are:
-= -- 99
-> -- 49
+            526 strings with 4890 characters,
+and the built_in function-call counts, 1428 in all, are:
+= -- 137
+> -- 63
 < -- 1
-+ -- 20
-- -- 16
-* -- 74
-:= -- 184
-add.period$ -- 11
-call.type$ -- 4
-change.case$ -- 19
++ -- 26
+- -- 20
+* -- 86
+:= -- 258
+add.period$ -- 17
+call.type$ -- 6
+change.case$ -- 27
 chr.to.int$ -- 0
-cite$ -- 6
-duplicate$ -- 43
-empty$ -- 92
-format.name$ -- 16
-if$ -- 220
+cite$ -- 8
+duplicate$ -- 55
+empty$ -- 114
+format.name$ -- 20
+if$ -- 286
 int.to.chr$ -- 0
-int.to.str$ -- 4
+int.to.str$ -- 6
 missing$ -- 3
-newline$ -- 22
-num.names$ -- 6
-pop$ -- 22
+newline$ -- 32
+num.names$ -- 10
+pop$ -- 24
 preamble$ -- 1
-purify$ -- 16
+purify$ -- 22
 quote$ -- 0
-skip$ -- 29
+skip$ -- 39
 stack$ -- 0
-substring$ -- 45
+substring$ -- 55
 swap$ -- 5
 text.length$ -- 1
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 16
+type$ -- 24
 warning$ -- 2
-while$ -- 8
-width$ -- 5
-write$ -- 41
+while$ -- 12
+width$ -- 7
+write$ -- 61
 (There were 2 warnings)

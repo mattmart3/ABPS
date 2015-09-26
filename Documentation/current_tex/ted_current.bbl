@@ -5,6 +5,12 @@
 \newblock
   \url{http://www.ulduzsoft.com/2014/01/select-poll-epoll-practical-difference-for-system-architects}.
 
+\bibitem{dibernardotesi}
+Gabriele~Di Bernardo.
+\newblock Transmission error detector per wi-fi su kernel linux 4.0.
+\newblock \url{http://amslaurea.unibo.it/8982/1/dibernardo_gabriele_tesi.pdf},
+  2015.
+
 \bibitem{rfc2460}
 Stephen~E Deering.
 \newblock Internet protocol, version 6 (ipv6) specification.
@@ -19,5 +25,12 @@ Louay Gammo, Tim Brecht, Amol Shukla, and David Pariag.
 Vittorio Ghini, Giorgia Lodi, and Fabio Panzieri.
 \newblock Always best packet switching: the mobile voip case study.
 \newblock {\em Journal of communications}, 4(9):700--713, 2009.
+
+\bibitem{mengolitesi}
+Alessandro Mengoli.
+\newblock Un' approccio cross-layer all’affidabilità guidata dalle
+  applicazioni.
+\newblock \url{http://amslaurea.unibo.it/8981/1/mengoli_alessandro_tesi.pdf},
+  2015.
 
 \end{thebibliography}
