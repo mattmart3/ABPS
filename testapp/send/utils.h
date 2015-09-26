@@ -3,7 +3,7 @@
 /* This program is a part of the ABPS software suite.                        */
 /*                                                                           */
 /* Copyright (C) 2015                                                        */
-/* Gabriele Di Bernardo, Matteo Martelli                                     */
+/* Gabriele Di Bernardo, Alessandro Mengoli, Matteo Martelli                 */
 /*                                                                           */
 /* This program is free software; you can redistribute it and/or             */
 /* modify it under the terms of the GNU General Public License               */
