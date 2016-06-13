@@ -9,9 +9,9 @@ $CP -vaa ../tx.c                  $1/net/mac80211/tx.c
 $CP -vaa ../skbuff.c              $1/net/core/skbuff.c
 $CP -vaa ../skbuff.h              $1/include/linux/skbuff.h
 
-$CP -vaa ../uapi/errqueue.h       $1/include/uapi/linux/errqueue.h
+$CP -vaa ../uapi/errqueue.h       $1/include/linux/errqueue.h
 $CP -vaa ../uapi/errqueue.h       /usr/include/linux/errqueue.h
-$CP -vaa ../uapi/socket.h         $1/include/uapi/linux/socket.h
+$CP -vaa ../uapi/socket.h         $1/include/linux/socket.h
 $CP -vaa ../uapi/socket.h         /usr/include/linux/socket.h
 
 $CP -vaa ../Makefile              $1/net/mac80211/Makefile
