@@ -61,15 +61,15 @@ struct sockaddr_in6 ipv6_dest_addr;
 
 /* create IPv4 socket */
 
-int __create_ipv4_socket(char *address, int port, int *file_descriptor, 
+int __create_ipv4_socket(char *address, int port, int *sd, 
                        struct sockaddr_in *destination_address)
 {
-	int error, option_value;
+	int error, enabled;
 
 	/* get datagram socket */
-	*file_descriptor = socket(AF_INET, SOCK_DGRAM, 0);
+	*sd = socket(AF_INET, SOCK_DGRAM, 0);
 
-	if (*file_descriptor == SOCKET_ERROR) {
+	if (*sd == SOCKET_ERROR) {
 		utils_print_error("%s: failed getting socket.\n%s",
 		                  __func__, strerror(errno));
 		return errno;
@@ -82,23 +82,20 @@ int __create_ipv4_socket(char *address, int port, int *file_descriptor,
 
 
 	/* configuring the socket */
-	option_value = 1;
-	error = setsockopt(*file_descriptor, SOL_SOCKET, SO_REUSEADDR, 
-	                   (char *)&option_value, sizeof(option_value));
-
+	enabled = 1;
+	error = setsockopt(*sd, SOL_SOCKET, SO_REUSEADDR, 
+			   (char *)&enabled, sizeof(enabled));
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for reuse address failed\n%s",
-		                  __func__, strerror(errno));
+				  __func__, strerror(errno));
 		return errno;
 	}
 
-
-	error = setsockopt(*file_descriptor, IPPROTO_IP, IP_RECVERR, 
-	                   (char *)&option_value, sizeof(option_value));
-
+	error = setsockopt(*sd, IPPROTO_IP, IP_RECVERR, 
+			(char *)&enabled, sizeof(enabled));
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for IP_RECVERR failed\n%s",
-		                  __func__, strerror(errno));
+				  __func__, strerror(errno));
 		return errno;
 	}
 
@@ -109,15 +106,15 @@ int __create_ipv4_socket(char *address, int port, int *file_descriptor,
 
 /* create IPv6 socket */
 int __create_ipv6_socket(char *ifname, char *address, 
-                       int port, int *file_descriptor, 
+                       int port, int *sd, 
                        struct sockaddr_in6 *destination_address)
 {
-	int error, option_value;
+	int error, enabled;
 
 	/* get datagram socket */
-	*file_descriptor = socket(AF_INET6, SOCK_DGRAM, 0);
+	*sd = socket(AF_INET6, SOCK_DGRAM, 0);
 	
-	if (*file_descriptor == SOCKET_ERROR) {
+	if (*sd == SOCKET_ERROR) {
 		utils_print_error("%s: failed getting socket.\n%s",
 		                  __func__, strerror(errno));
 		return errno;
@@ -134,10 +131,10 @@ int __create_ipv6_socket(char *ifname, char *address,
 
 	/* configuring the socket */
 
-	option_value = 1;
+	enabled = 1;
 
-	error = setsockopt(*file_descriptor, SOL_SOCKET, SO_REUSEADDR,
-	                   (char *)&option_value, sizeof(option_value));
+	error = setsockopt(*sd, SOL_SOCKET, SO_REUSEADDR,
+	                   (char *)&enabled, sizeof(enabled));
 	
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for reuse address failed\n%s",
@@ -146,8 +143,8 @@ int __create_ipv6_socket(char *ifname, char *address,
 	}
 
 
-	error = setsockopt(*file_descriptor, IPPROTO_IP, IP_RECVERR,
-	                   (char *)&option_value, sizeof(option_value));
+	error = setsockopt(*sd, IPPROTO_IP, IP_RECVERR,
+	                   (char *)&enabled, sizeof(enabled));
 
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for IP_RECVERR failed\n%s",

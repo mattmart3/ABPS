@@ -26,7 +26,9 @@ print "Socket primed."
 result = socket.getaddrinfo(address, port, socket.AF_INET, socket.SOCK_DGRAM, 0, 0)
 
 family, socketType, proto, canonName, socketAddress = result[0]
+
 receivingSocket.bind(socketAddress)
+#receivingSocket.bind(("", port)) #INADDR_ANY
 print "Socket created."
 while 1:
     data, address = receivingSocket.recvfrom(8000)

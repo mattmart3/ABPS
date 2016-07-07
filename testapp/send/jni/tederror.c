@@ -83,6 +83,7 @@ int tederror_recv_nowait(struct err_msg_s **error_message)
 	struct err_msg_s *em;
 
 
+	addr = NULL;
 	*error_message = alloc_init_ErrMsg();	
 	em = *error_message;
 
@@ -114,11 +115,12 @@ int tederror_recv_nowait(struct err_msg_s **error_message)
 
 	} else {
 		utils_print_error("%s: wrong ip_vers.\n", __func__);	
+		return -1;
 	}
 	
 	shared_descriptor = net_get_shared_descriptor();
 
-	return_value = getsockname(shared_descriptor, addr, &(em->namelen));
+	return_value = getsockname(shared_descriptor, addr, (socklen_t *)&(em->namelen));
 	
 	if(return_value != 0) {
 		utils_print_error("%s: getsockname failed (%s).\n",
@@ -211,7 +213,7 @@ int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 				break;
 			default:
 				if(emsg->ee->ee_errno != 0)
-					printf(strerror(emsg->ee->ee_errno));
+					printf("%s\n", strerror(emsg->ee->ee_errno));
 
 				break;
 		}

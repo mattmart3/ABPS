@@ -28,7 +28,8 @@
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <netinet/in.h>
-#include <glib.h>
+#include <libgen.h>
+//#include <glib.h>
 #include <unistd.h>
 
 #include "network.h"
@@ -36,6 +37,7 @@
 #include "utils.h"
 #include "structs.h"
 #include "consts.h"
+#include "hashtable.h"
 
 
 #define USAGE "[OPTIONS] ADDRESS PORT\n\n\
@@ -98,10 +100,10 @@ char * new_msg(void)
 }
 
 /* Send a new message requesting an identifier for TED. Check net_sendmsg(). */
-void send_new_msg(GHashTable *ht)
+void send_new_msg(hashtable *ht/*GHashTable *ht*/)
 {
 	uint32_t identifier;
-	gint *hash_key;
+	//int *hash_key;
 	struct msg_info_s *info;
 	char *buffer;
 
@@ -110,19 +112,21 @@ void send_new_msg(GHashTable *ht)
 	net_sendmsg(buffer, strlen(buffer), &identifier);
 	printf("-----------------------------------------------------"
 	       "----------------\n\t\t\t\t\tSent pkt ID: %d\n\t\t\t\t\tsize: %ld\n", 
-	       identifier, strlen(buffer));
+	       identifier, (unsigned long int)strlen(buffer));
 	//printf("%s\n", buffer);
 
-	hash_key = g_new0(gint, 1);
-	*hash_key = identifier;
+	//hash_key = g_new0(gint, 1);
+	//*hash_key = identifier;
 
-	info = g_new0(struct msg_info_s, 1);
+	//info = g_new0(struct msg_info_s, 1);
+	info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
 	info->size = strlen(buffer);
 	info->id = identifier;
 	info->n_frags = 0;
 	info->last_frag_received = 0;
 
-	g_hash_table_insert(ht, hash_key, info);
+	//g_hash_table_insert(ht, hash_key, info);
+	HASH((*ht), identifier, info);
 
 	free(buffer);
 }
@@ -178,7 +182,8 @@ int try_recompose(struct msg_info_s *msg_origin)
 
 
 void hash_table_remove(struct msg_info_s *msg_origin,
-                       GHashTable *hash_table, gconstpointer key)
+                       hashtable *ht, int key)
+                       /*GHashTable *hash_table, gconstpointer key)*/
 {
 	int i;
 
@@ -186,11 +191,12 @@ void hash_table_remove(struct msg_info_s *msg_origin,
 		free(msg_origin->frags[i]);
 	
 
-	g_hash_table_remove(hash_table, key);
+	//g_hash_table_remove(hash_table, key);
+	HASH((*ht), key, NULL);
 
 }
 /* Receive all the ted notification error that are pending in the errqueue */
-void recv_ted_errors(GHashTable *ht)
+void recv_ted_errors(hashtable *ht/*GHashTable *ht*/)
 {
 	struct err_msg_s *error_message;
 
@@ -199,7 +205,7 @@ void recv_ted_errors(GHashTable *ht)
 	while (tederror_recv_nowait(&error_message) > 0) {
 		struct ted_info_s *ted_info;
 		struct msg_info_s *msg_origin;
-		gint *key;
+		int key;
 
 		ted_info = (struct ted_info_s *)malloc(sizeof(struct ted_info_s));
 		if (ted_info == NULL) 
@@ -216,10 +222,12 @@ void recv_ted_errors(GHashTable *ht)
 		       ted_info->msg_id, ted_info->retry_count, ted_info->status,
 		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
 
-		key = g_new0(gint, 1);
-		*key = ted_info->msg_id;
+		//key = g_new0(gint, 1);
+		//*key = ted_info->msg_id;
+		key = ted_info->msg_id;
 
-		msg_origin = g_hash_table_lookup(ht, key);
+		//msg_origin = g_hash_table_lookup(ht, key);
+		msg_origin = GET_HASH((*ht), key, NULL);
 		if (msg_origin == NULL) {
 			utils_print_error("No key %d in the ht\n", key);
 
@@ -235,7 +243,7 @@ void recv_ted_errors(GHashTable *ht)
 
 			msg_origin->n_frags++;
 
-			/* If this is the last fragment, or if it is already
+			/* If this is the last fragment, or if it has already
 			 * been received, try the recomposition */
 			if (ted_info->more_frag == 0)
 				msg_origin->last_frag_received = 1;
@@ -261,7 +269,11 @@ int main(int argc, char **argv)
 	int i, idx; 
 	int epollfd, nfds;
 	struct epoll_event events[MAX_EPOLL_EVENTS];
-	GHashTable *hashtb;
+	//GHashTable *hashtb;
+	hashtable *hashtb;
+
+	address = NULL;
+	port = -1;
 
 	asprintf(&usage, "Usage: %s %s", basename(argv[0]), USAGE);
 	
@@ -295,7 +307,9 @@ int main(int argc, char **argv)
 	if (epollfd == -1)
 		utils_exit_error("init epoll failed on sd");
 	
-	hashtb = g_hash_table_new(g_int_hash, g_int_equal);
+	//hashtb = g_hash_table_new(g_int_hash, g_int_equal);
+	hashtb = (hashtable *)malloc(sizeof(hashtable));
+	HASH_INIT((*hashtb), HASH_SIZE_DEFAULT);
 
 	idx = 0;
 	/* Main epoll loop. Wait for events on the socket descriptor.
@@ -318,14 +332,14 @@ int main(int argc, char **argv)
 
 			/* If there are pending TED error messages 
 			 * in the errqueue, receive them and print TED infos. */
-			if (events[i].events & EPOLLERR) {
+			if (events[i].events & EPOLLERR)
 				recv_ted_errors(hashtb);
-			}
-
 		}
 	}
 
-	g_hash_table_destroy(hashtb);
+	//g_hash_table_destroy(hashtb);
+	HASH_FINI((*hashtb));
+	free(hashtb);
 	net_release_shared_instance();
 
 	return 0;

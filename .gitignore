@@ -1,10 +1,12 @@
 # Object files
+testapp/send/obj
 *.o
 *.ko
 *.obj
 *.elf
 
 # Libraries
+testapp/send/libs
 *.lib
 *.a
 
