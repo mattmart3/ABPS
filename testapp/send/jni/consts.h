@@ -26,7 +26,7 @@
 #define DEFAULT_N_PACKETS 5000
 #define DEFAULT_MSG_LENGTH 1050 
 
-#define ABPS_CMSG_TYPE 111
+#define TED_CMSG_TYPE 111
 #define MAX_EPOLL_EVENTS 10
 
 #define SOCKET_ERROR   ((int)-1)

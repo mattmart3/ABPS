@@ -1,16 +1,3 @@
-diff --git a/Makefile b/Makefile
-index 0c11d69..c229b05 100644
---- a/Makefile
-+++ b/Makefile
-@@ -1,7 +1,7 @@
- VERSION = 3
- PATCHLEVEL = 4
- SUBLEVEL = 0
--EXTRAVERSION =
-+EXTRAVERSION = 
- NAME = Saber-toothed Squirrel
- 
- # *DOCUMENTATION*
 diff --git a/arch/arm/configs/hammerhead_defconfig_ted b/arch/arm/configs/hammerhead_defconfig_ted
 new file mode 100644
 index 0000000..8207d13
@@ -3723,19 +3710,6 @@ index 9210bdc..4afd503 100644
 +/* end TED */
 +
  #endif /* MAC80211_H */
-diff --git a/kernel/timeconst.pl b/kernel/timeconst.pl
-index eb51d76..063fcc0 100644
---- a/kernel/timeconst.pl
-+++ b/kernel/timeconst.pl
-@@ -370,7 +370,7 @@ if ($hz eq '--can') {
- 	}
- 
- 	@val = @{$canned_values{$hz}};
--	if (!defined(@val)) {
-+	if (!(@val)) {
- 		@val = compute_values($hz);
- 	}
- 	output($hz, @val);
 diff --git a/make_ted.sh b/make_ted.sh
 new file mode 100755
 index 0000000..5b70b84

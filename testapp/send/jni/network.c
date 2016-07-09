@@ -250,7 +250,7 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 	cmsg = CMSG_FIRSTHDR(&msg_header);
 
 	cmsg->cmsg_level = SOL_UDP;
-	cmsg->cmsg_type = ABPS_CMSG_TYPE;
+	cmsg->cmsg_type = TED_CMSG_TYPE;
 
 	cmsg->cmsg_len = CMSG_LEN(sizeof(id_pointer));
 
