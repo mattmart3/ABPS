@@ -1,0 +1,445 @@
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index f15154a..576fe0d 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -675,6 +675,13 @@ struct sk_buff {
+ 				*data;
+ 	unsigned int		truesize;
+ 	atomic_t		users;
++
++	/* TED
++	 * TODO: we could use SO_WIFI_STATUS option of the SOL_SOCKET 
++	 * for a more specific use and a better control. */
++	uint32_t 		transport_pktid; 
++	u8                      ted_notify:1;
++	/* end TED */
+ };
+ 
+ #ifdef __KERNEL__
+diff --git a/include/linux/socket.h b/include/linux/socket.h
+index 5bf59c8..163eacf 100644
+--- a/include/linux/socket.h
++++ b/include/linux/socket.h
+@@ -82,6 +82,11 @@ struct cmsghdr {
+         int		cmsg_type;	/* protocol-specific type */
+ };
+ 
++/* TED */
++extern uint32_t get_transport_pktid(void);
++extern int putuser_transport_pktid(uint32_t transport_pktid, struct msghdr *msg);
++/* end TED */
++
+ /*
+  *	Ancillary data object information MACROS
+  *	Table 5-14 of POSIX 1003.1g
+diff --git a/include/net/ip.h b/include/net/ip.h
+index d14af7e..7b9c937 100644
+--- a/include/net/ip.h
++++ b/include/net/ip.h
+@@ -545,6 +545,16 @@ void ip_icmp_error(struct sock *sk, struct sk_buff *skb, int err, __be16 port,
+ void ip_local_error(struct sock *sk, int err, __be32 daddr, __be16 dport,
+ 		    u32 info);
+ 
++/* TED */
++extern void ip_local_error_notify(struct sock *sk,
++				  uint32_t transport_pktid,
++				  u16 fragment_length, /* only data, not header */
++				  u16 fragment_offset,
++				  u8 more_fragment,
++				  u8 acked,
++				  u8 retry_count);
++/* end TED */
++
+ static inline void ip_cmsg_recv(struct msghdr *msg, struct sk_buff *skb)
+ {
+ 	ip_cmsg_recv_offset(msg, skb, 0);
+diff --git a/include/net/mac80211.h b/include/net/mac80211.h
+index fc57f6b..6de89a1 100644
+--- a/include/net/mac80211.h
++++ b/include/net/mac80211.h
+@@ -5392,4 +5392,12 @@ void ieee80211_unreserve_tid(struct ieee80211_sta *sta, u8 tid);
+  */
+ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
+ 				     struct ieee80211_txq *txq);
++
++/* TED */
++int ted_extract_pkt_info(struct sk_buff *skb, struct ieee80211_hdr *hdr);
++int ted_info_response(struct sk_buff *skb, struct ieee80211_hw *hw,
++		      struct ieee80211_hdr *hdr, struct ieee80211_tx_info *info,
++		      u8 acked, int retry_count);
++/* end TED */
++
+ #endif /* MAC80211_H */
+diff --git a/include/uapi/linux/errqueue.h b/include/uapi/linux/errqueue.h
+index 07bdce1..3bf3b8f 100644
+--- a/include/uapi/linux/errqueue.h
++++ b/include/uapi/linux/errqueue.h
+@@ -11,6 +11,7 @@ struct sock_extended_err {
+ 	__u8	ee_pad;
+ 	__u32   ee_info;
+ 	__u32   ee_data;
++	__u8    ee_retry_count; /* TED */
+ };
+ 
+ #define SO_EE_ORIGIN_NONE	0
+@@ -19,9 +20,41 @@ struct sock_extended_err {
+ #define SO_EE_ORIGIN_ICMP6	3
+ #define SO_EE_ORIGIN_TXSTATUS	4
+ #define SO_EE_ORIGIN_TIMESTAMPING SO_EE_ORIGIN_TXSTATUS
++#define SO_EE_ORIGIN_LOCAL_NOTIFY 5 /* TED */
+ 
+ #define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
+ 
++/* TED */
++/* TED convenient wrapper APIs for First-hop Transmission Notification. */
++
++/* TED identifier of the datagram whose notification refers to. */
++#define ted_msg_id(notification) \
++			((struct sock_extended_err *) notification)->ee_info
++
++/* Message status to the first hop.
++   Return 1 if the message was successfully delivered to the AP, 0 otherwise. */
++#define ted_status(notification) \
++			((struct sock_extended_err *) notification)->ee_type
++
++/* Returns the number of times that the packet, 
++   associated to the notification provided, was retrasmitted to the AP.  */
++#define ted_retry_count(notification) \
++			((struct sock_extended_err *) notification)->ee_retry_count
++
++/* Returns the fragment length */
++#define ted_fragment_length(notification) \
++			(((struct sock_extended_err *) notification)->ee_data >> 16)
++
++/* Returns the offset of the current message 
++   associated with the notification from the original message. */
++#define ted_fragment_offset(notification) \
++			((((struct sock_extended_err *) notification)->ee_data << 16) >> 16)
++
++/* Indicates if there is more fragment with the same TED identifier */
++#define ted_more_fragment(notification) \
++			((struct sock_extended_err *) notification)->ee_code
++/* end TED */
++
+ /**
+  *	struct scm_timestamping - timestamps exposed through cmsg
+  *
+diff --git a/include/uapi/linux/socket.h b/include/uapi/linux/socket.h
+index 76ab0c6..7425694 100644
+--- a/include/uapi/linux/socket.h
++++ b/include/uapi/linux/socket.h
+@@ -18,4 +18,6 @@ struct __kernel_sockaddr_storage {
+ 				/* _SS_MAXSIZE value minus size of ss_family */
+ } __attribute__ ((aligned(_K_SS_ALIGNSIZE)));	/* force desired alignment */
+ 
++#define TED_CMSG_TYPE 111 /* TED */
++
+ #endif /* _UAPI_LINUX_SOCKET_H */
+diff --git a/net/ipv4/ip_output.c b/net/ipv4/ip_output.c
+index c65b93a..426704d 100644
+--- a/net/ipv4/ip_output.c
++++ b/net/ipv4/ip_output.c
+@@ -589,6 +589,13 @@ int ip_fragment(struct sock *sk, struct sk_buff *skb,
+ 				iph = ip_hdr(frag);
+ 				iph->tot_len = htons(frag->len);
+ 				ip_copy_metadata(frag, skb);
++
++				/* TED */
++				frag->transport_pktid = skb->transport_pktid;
++				frag->ted_notify = skb->ted_notify;
++				frag->sk = skb->sk;
++				/* end TED */
++
+ 				if (offset == 0)
+ 					ip_options_fragment(frag);
+ 				offset += skb->len - hlen;
+@@ -698,6 +705,12 @@ slow_path:
+ 
+ 		skb_copy_from_linear_data(skb, skb_network_header(skb2), hlen);
+ 
++		/* TED */
++		/* Copy the msg identifier to the new packet */
++		skb2->transport_pktid = skb->transport_pktid;
++		skb2->ted_notify = skb->ted_notify;
++		/* end TED */
++
+ 		/*
+ 		 *	Copy a block of the IP datagram.
+ 		 */
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index 7cfb089..bc55475 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -1233,6 +1233,73 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
+ EXPORT_SYMBOL(compat_ip_setsockopt);
+ #endif
+ 
++/* TED */
++/* 
++ *  Store 802.11 frame information into the corresponding socket error struct.
++ *  This will be used by TED when a response related to the 802.11 frame occurs.
++ */
++void ip_local_error_notify(struct sock *sk, uint32_t transport_pktid,
++			   u16 fragment_length, u16 fragment_offset,
++			   u8 more_fragment, u8 acked, u8 retry_count)
++{
++	struct inet_sock *inet = NULL;
++	struct sock_exterr_skb *serr;
++	struct sk_buff *skb;
++	
++	if (sk == NULL) {
++		printk(KERN_WARNING "TED: null sk in %s\n", __FUNCTION__);
++		return;
++	}
++	inet = inet_sk(sk);
++	
++	if (inet == NULL) {
++		printk(KERN_WARNING "TED: null inet %s\n", __FUNCTION__);
++		return;
++	}
++
++	if (!inet->recverr) 
++		return;
++
++	skb = alloc_skb(sizeof(struct iphdr), GFP_ATOMIC);
++
++	if (!skb) {
++		printk(KERN_WARNING "TED: alloc failed in %s", __FUNCTION__);
++		return;
++	}
++	
++	skb_put(skb, sizeof(struct iphdr));
++	skb_reset_network_header(skb);
++
++	serr = SKB_EXT_ERR(skb);
++	if (!serr) {
++		printk(KERN_WARNING "TED: null serr in %s", __FUNCTION__);
++		return;
++	}
++
++	serr->ee.ee_errno = 0; /* success */
++	serr->ee.ee_origin = SO_EE_ORIGIN_LOCAL_NOTIFY;
++	serr->ee.ee_type = acked;
++	serr->ee.ee_pad = 0;
++	serr->ee.ee_code = more_fragment;
++	serr->ee.ee_retry_count = retry_count;
++
++	/* identifier of the related trasport layer pakcket */
++	serr->ee.ee_info = transport_pktid;
++
++	/*  ee_data is a 32 bit word:
++	 *  MSB (16 bit fragment length , 16 bit fragment offset) LSB */
++	serr->ee.ee_data = (((u32)fragment_length)<<16) + fragment_offset;
++
++	__skb_pull(skb, skb_tail_pointer(skb) - skb->data);
++	skb_reset_transport_header(skb);
++	
++	printk(KERN_NOTICE "ted: before sock_queue_err");
++	if (sock_queue_err_skb(sk, skb))
++		kfree_skb(skb);
++}
++EXPORT_SYMBOL(ip_local_error_notify);
++/* end TED */
++
+ /*
+  *	Get the options. Note for future reference. The GET of IP options gets
+  *	the _received_ ones. The set sets the _sent_ ones.
+diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+index 83aa604..4fd6bf9 100644
+--- a/net/ipv4/udp.c
++++ b/net/ipv4/udp.c
+@@ -1052,8 +1052,23 @@ back_from_confirm:
+ 				  sizeof(struct udphdr), &ipc, &rt,
+ 				  msg->msg_flags);
+ 		err = PTR_ERR(skb);
+-		if (!IS_ERR_OR_NULL(skb))
++		if (!IS_ERR_OR_NULL(skb)) {
++
++			/* TED  */
++			/* Increment and copy the id of the current 
++			 * transport layer packet 
++			 * into its corresponding skb field. */
++			skb->transport_pktid = get_transport_pktid();
++
++			/* Copy the transport packet id from  sk_buff struct 
++			 * into  the user space pointer. 
++			 * Also mark the sk_buff as traceble by TED. */
++			if (putuser_transport_pktid(skb->transport_pktid, msg) 
++			    && inet->recverr)
++				skb->ted_notify = 1;
++			/* end TED */
+ 			err = udp_send_skb(skb, fl4);
++		}
+ 		goto out;
+ 	}
+ 
+diff --git a/net/ipv6/ip6_output.c b/net/ipv6/ip6_output.c
+index bc09cb9..fb6fb32 100644
+--- a/net/ipv6/ip6_output.c
++++ b/net/ipv6/ip6_output.c
+@@ -668,6 +668,10 @@ int ip6_fragment(struct sock *sk, struct sk_buff *skb,
+ 						htons(frag->len -
+ 						      sizeof(struct ipv6hdr));
+ 				ip6_copy_metadata(frag, skb);
++				/* TED */
++				frag->transport_pktid = skb->transport_pktid;
++				frag->ted_notify = skb->ted_notify;
++				/* end TED */
+ 			}
+ 
+ 			err = output(sk, skb);
+@@ -754,6 +758,12 @@ slow_path:
+ 		 */
+ 
+ 		ip6_copy_metadata(frag, skb);
++
++		/* TED */
++		frag->transport_pktid = skb->transport_pktid;
++		frag->ted_notify = skb->ted_notify;
++		/* end TED */
++
+ 		skb_reserve(frag, hroom);
+ 		skb_put(frag, len + hlen + sizeof(struct frag_hdr));
+ 		skb_reset_network_header(frag);
+diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
+index e51fc3e..d751a6b 100644
+--- a/net/ipv6/udp.c
++++ b/net/ipv6/udp.c
+@@ -1313,8 +1313,22 @@ back_from_confirm:
+ 				   &fl6, (struct rt6_info *)dst,
+ 				   msg->msg_flags, dontfrag);
+ 		err = PTR_ERR(skb);
+-		if (!IS_ERR_OR_NULL(skb))
++		if (!IS_ERR_OR_NULL(skb)) {
++			/* TED  */
++			/* Increment and copy the id of the current 
++			 * transport layer packet 
++			 * into its corresponding skb field. */
++			skb->transport_pktid = get_transport_pktid();
++
++			/* Copy the transport packet id from  sk_buff struct 
++			 * into  the user space pointer. 
++			 * Also mark the sk_buff as traceble by TED. */
++			if (putuser_transport_pktid(skb->transport_pktid, msg) 
++			    && inet->recverr)
++				skb->ted_notify = 1;
++			/* end TED */
+ 			err = udp_v6_send_skb(skb, &fl6);
++		}
+ 		goto release_dst;
+ 	}
+ 
+diff --git a/net/mac80211/Makefile b/net/mac80211/Makefile
+index 3275f01..92e24d8 100644
+--- a/net/mac80211/Makefile
++++ b/net/mac80211/Makefile
+@@ -30,7 +30,8 @@ mac80211-y := \
+ 	chan.o \
+ 	trace.o mlme.o \
+ 	tdls.o \
+-	ocb.o
++	ocb.o \
++	ted.o
+ 
+ mac80211-$(CONFIG_MAC80211_LEDS) += led.o
+ mac80211-$(CONFIG_MAC80211_DEBUGFS) += \
+diff --git a/net/mac80211/status.c b/net/mac80211/status.c
+index 005fdbe..ad400cd 100644
+--- a/net/mac80211/status.c
++++ b/net/mac80211/status.c
+@@ -793,6 +793,18 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
+ 
+ 	rcu_read_unlock();
+ 
++	/* TED */
++	/* Merge the response status info with the frame info 
++	 * previoulsy collected during the transmission phase.
++	 * Do this only if the socket was set with IP_RECVERR option
++	 * and a pointer for the transport packet id was reserverd in the 
++	 * user space cmsg struct during the sendmsg call. */
++	if (skb->ted_notify) {
++		acked = !!(info->flags & IEEE80211_TX_STAT_ACK);
++		ted_info_response(skb, hw, hdr, info, acked, retry_count);
++	}
++	/* end TED */
++
+ 	ieee80211_led_tx(local);
+ 
+ 	/* SNMP counters
+diff --git a/net/mac80211/tx.c b/net/mac80211/tx.c
+index 667111e..8af280a 100644
+--- a/net/mac80211/tx.c
++++ b/net/mac80211/tx.c
+@@ -838,6 +838,9 @@ ieee80211_tx_h_sequence(struct ieee80211_tx_data *tx)
+ 	if (!tx->sta->sta.txq[0])
+ 		hdr->seq_ctrl = ieee80211_tx_next_seq(tx->sta, tid);
+ 
++	if (tx->skb && tx->skb->ted_notify)
++		ted_extract_pkt_info(tx->skb, hdr); /* TED */
++
+ 	return TX_CONTINUE;
+ }
+ 
+diff --git a/net/socket.c b/net/socket.c
+index 884e329..9ea3769 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -3302,3 +3302,58 @@ int kernel_sock_shutdown(struct socket *sock, enum sock_shutdown_cmd how)
+ 	return sock->ops->shutdown(sock, how);
+ }
+ EXPORT_SYMBOL(kernel_sock_shutdown);
++
++/* TED */
++/* Global identifier of the outgoing transport layer packets */
++static uint32_t transport_pktid = 0;
++
++/* Increment and return the global transport layer packet identifier. 
++ * XXX: used in UDP only for now. */
++uint32_t get_transport_pktid(void)
++{
++	static DEFINE_SPINLOCK(lock);
++	uint32_t identifier;
++	unsigned long flags;
++
++	spin_lock_irqsave(&lock, flags);
++	identifier = transport_pktid++;
++	spin_unlock_irqrestore(&lock, flags);
++
++	return identifier;
++}
++EXPORT_SYMBOL(get_transport_pktid);
++
++/* Copy the transport layer packet identifier from the sk_buff struct into 
++ * the user space pointer provided by the control message. */
++int putuser_transport_pktid(uint32_t transport_pktid, struct msghdr *msg)
++{
++	struct cmsghdr *cmsg;
++
++	if (!msg->msg_controllen)
++		goto skip;
++
++	for (cmsg=CMSG_FIRSTHDR(msg); cmsg; cmsg=CMSG_NXTHDR(msg, cmsg)) {
++		
++		if (!CMSG_OK(msg, cmsg)) {
++			pr_notice("TED: %s: not CMSG_OK\n", __FUNCTION__);
++			return -EINVAL;
++		}
++
++		if (cmsg->cmsg_level != SOL_UDP)
++			continue;
++
++		if (cmsg->cmsg_type == TED_CMSG_TYPE) {
++			
++			put_user(transport_pktid,
++			         (uint32_t __user *)CMSG_DATA(cmsg)); 
++			pr_notice("TED: %s: transport packet id set to %d",
++			          __FUNCTION__, transport_pktid);
++
++			return 1;
++		}
++	}
++skip:
++	return 0;
++}
++EXPORT_SYMBOL(putuser_transport_pktid);
++/* end TED */
