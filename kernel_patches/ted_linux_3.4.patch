@@ -74,13 +74,6 @@ index 111f26b..46e185c 100644
  };
  
  #ifdef __KERNEL__
-@@ -2560,5 +2567,6 @@ static inline bool skb_is_recycleable(const struct sk_buff *skb, int skb_size)
- 
- 	return true;
- }
-+
- #endif	/* __KERNEL__ */
- #endif	/* _LINUX_SKBUFF_H */
 diff --git a/include/linux/socket.h b/include/linux/socket.h
 index b84bbd4..39604a6 100644
 --- a/include/linux/socket.h

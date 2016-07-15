@@ -80,7 +80,6 @@ int __create_ipv4_socket(char *address, int port, int *sd,
 	inet_pton(AF_INET, address, &(destination_address->sin_addr));
 	destination_address->sin_port = htons(port);
 
-
 	/* configuring the socket */
 	enabled = 1;
 	error = setsockopt(*sd, SOL_SOCKET, SO_REUSEADDR, 
@@ -130,22 +129,17 @@ int __create_ipv6_socket(char *ifname, char *address,
 	destination_address->sin6_scope_id = if_nametoindex(ifname);
 
 	/* configuring the socket */
-
 	enabled = 1;
-
 	error = setsockopt(*sd, SOL_SOCKET, SO_REUSEADDR,
 	                   (char *)&enabled, sizeof(enabled));
-	
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for reuse address failed\n%s",
 		                  __func__, strerror(errno));
 		return errno;
 	}
 
-
 	error = setsockopt(*sd, IPPROTO_IP, IP_RECVERR,
 	                   (char *)&enabled, sizeof(enabled));
-
 	if (error == SOCKET_ERROR) {
 		utils_print_error("%s: setsockopt for IP_RECVERR failed\n%s",
 		                  __func__, strerror(errno));
