@@ -139,26 +139,6 @@ index 9210bdc..4afd503 100644
 +/* end TED */
 +
  #endif /* MAC80211_H */
-diff --git a/make_ted.sh b/make_ted.sh
-new file mode 100755
-index 0000000..5b70b84
---- /dev/null
-+++ b/make_ted.sh
-@@ -0,0 +1,14 @@
-+#!/bin/bash
-+
-+
-+export ARCH=arm
-+export SUBARCH=arm
-+export CROSS_COMPILE=arm-eabi-
-+
-+if [ -z "$1" -o "$1" != "env" ] ; then
-+
-+	make hammerhead_defconfig_ted
-+
-+	make -j3
-+fi
-+
 diff --git a/net/ipv4/ip_output.c b/net/ipv4/ip_output.c
 index 6f72f39..4109d3f 100644
 --- a/net/ipv4/ip_output.c
@@ -199,37 +179,15 @@ index 6f72f39..4109d3f 100644
  			skb->csum = 0;
  			skb_reserve(skb, hh_len);
 diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index 2fd0fba..07e5451 100644
+index 2fd0fba..833bf70 100644
 --- a/net/ipv4/ip_sockglue.c
 +++ b/net/ipv4/ip_sockglue.c
-@@ -1088,6 +1088,99 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
+@@ -1088,6 +1088,77 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
  EXPORT_SYMBOL(compat_ip_setsockopt);
  #endif
  
 +
 +/* TED */
-+/*  
-+ *  The following is used in the mac80211 module in order
-+ *  to decide whether or not to use TED notifications on the current socket.
-+ *  The decision depends on the user socket options (IPPPROTO_IP IP_RECVERR).
-+ */
-+int required_ip_local_error_notify(struct sock *sk)
-+{
-+	struct inet_sock *inet = NULL;
-+
-+	inet = inet_sk(sk);
-+	
-+	if (inet == NULL) {
-+		printk(KERN_ERR "TED: %s: null inet socket\n", __FUNCTION__);
-+		return 0;
-+	}
-+
-+	if (!inet->recverr)
-+		return 0;
-+
-+	return 1;
-+}
-+
 +/* 
 + *  Store 802.11 frame information into the corresponding socket error struct.
 + *  This will be used by TED when a response related to the 802.11 frame occurs.
@@ -961,10 +919,10 @@ index e76facc..abaa035 100644
  }
  
 diff --git a/net/socket.c b/net/socket.c
-index 851edcd..352c4d0 100644
+index 851edcd..ace57c4 100644
 --- a/net/socket.c
 +++ b/net/socket.c
-@@ -3378,3 +3378,61 @@ int kernel_sock_shutdown(struct socket *sock, enum sock_shutdown_cmd how)
+@@ -3378,3 +3378,65 @@ int kernel_sock_shutdown(struct socket *sock, enum sock_shutdown_cmd how)
  	return sock->ops->shutdown(sock, how);
  }
  EXPORT_SYMBOL(kernel_sock_shutdown);
@@ -987,8 +945,8 @@ index 851edcd..352c4d0 100644
 +
 +	return identifier;
 +}
-+
 +EXPORT_SYMBOL(get_transport_pktid);
++
 +/* Copy the transport layer packet identifier from the sk_buff struct into 
 + * the user space pointer provided by the control message. */
 +int putuser_transport_pktid(uint32_t transport_pktid, struct msghdr *msg)
@@ -1009,20 +967,24 @@ index 851edcd..352c4d0 100644
 +			continue;
 +
 +		if (cmsg->cmsg_type == TED_CMSG_TYPE) {
-+			
-+			put_user(transport_pktid,
-+			         (uint32_t __user *)CMSG_DATA(cmsg)); 
-+			pr_notice("TED: %s: transport packet id set to %d",
-+			          __FUNCTION__, transport_pktid);
++			uint32_t __user *p2userp = NULL;
 +
++			/* cmsg data contains the address of the user space 
++			 * pointer that will point to the uint32_t id. 
++			 * We copy this address into a local pointer 
++			 * to user pointer variable. */
++			memcpy(&p2userp, (uint32_t __user *)CMSG_DATA(cmsg),
++			       sizeof(uint32_t __user *));
++			
++			put_user(transport_pktid, p2userp); 
++			pr_notice("TED: %s: transport packet id set to %d\n",
++				  __FUNCTION__, transport_pktid);
 +			return 1;
 +		}
 +	}
 +skip:
 +	return 0;
 +}
-+
 +EXPORT_SYMBOL(putuser_transport_pktid);
-+
 +
 +/* end TED */

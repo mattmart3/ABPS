@@ -203,20 +203,12 @@ int net_check_ip_instance_and_version(void)
 int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 {
 	int result_value, ip_vers;
-
-	char *pointer;
-
-	char ancillary_buffer[CMSG_SPACE(sizeof(id_pointer))];
-
 	struct iovec iov[1];
-	
 	struct msghdr msg_header;
-		
 	struct cmsghdr *cmsg;
 
 	iov[0].iov_base = (void *) buffer;
 	iov[0].iov_len = length;
-
 
 	if ((ip_vers = net_check_ip_instance_and_version()) == -1)
 		return -1;
@@ -238,9 +230,6 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 	msg_header.msg_iov = iov;
 	msg_header.msg_iovlen = 1;
 
-	msg_header.msg_control = ancillary_buffer;
-	msg_header.msg_controllen = sizeof(ancillary_buffer);
-
 	cmsg = CMSG_FIRSTHDR(&msg_header);
 
 	cmsg->cmsg_level = SOL_UDP;
@@ -248,14 +237,16 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 
 	cmsg->cmsg_len = CMSG_LEN(sizeof(id_pointer));
 
-	pointer = (char *)CMSG_DATA(cmsg);
-
-	memcpy(pointer, &id_pointer, sizeof(id_pointer));
-
+	/* Copy the address of our user space pointer (id_pointer)
+	 * into the cmsg data. Later the kernel will put a new id 
+	 * directly in our user space pointer accessing the cmsg data. */
+	memcpy((uint32_t *)CMSG_DATA(cmsg), &id_pointer, sizeof(id_pointer));
+	
 	msg_header.msg_controllen = cmsg->cmsg_len;
 
 	/* Prepare for sending. */
-	result_value = sendmsg(shared_descriptor, &msg_header, MSG_NOSIGNAL | MSG_DONTWAIT);
+	result_value = sendmsg(shared_descriptor, &msg_header,
+			       MSG_NOSIGNAL | MSG_DONTWAIT);
 	if(result_value < 0)
 		utils_print_error("%s: sendmsg error (%s).\n",
 		                  __func__, strerror(errno));
