@@ -937,16 +937,16 @@ index 851edcd..ace57c4 100644
 +			continue;
 +
 +		if (cmsg->cmsg_type == TED_CMSG_TYPE) {
-+			uint32_t __user *p2userp = NULL;
++			uint32_t __user *userp = NULL;
 +
 +			/* cmsg data contains the address of the user space 
 +			 * pointer that will point to the uint32_t id. 
-+			 * We copy this address into a local pointer 
-+			 * to user pointer variable. */
-+			memcpy(&p2userp, (uint32_t __user *)CMSG_DATA(cmsg),
++			 * We set the local pointer address to the user space 
++			 * pointer address. */
++			memcpy(&userp, (uint32_t __user *)CMSG_DATA(cmsg),
 +			       sizeof(uint32_t __user *));
 +			
-+			put_user(transport_pktid, p2userp); 
++			put_user(transport_pktid, userp); 
 +			pr_notice("TED: %s: transport packet id set to %d\n",
 +				  __FUNCTION__, transport_pktid);
 +			return 1;

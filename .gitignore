@@ -1,12 +1,12 @@
 # Object files
-testapp/send/obj
+tedapp/send/obj
 *.o
 *.ko
 *.obj
 *.elf
 
 # Libraries
-testapp/send/libs
+tedapp/send/libs
 *.lib
 *.a
 
@@ -17,6 +17,7 @@ testapp/send/libs
 *.dylib
 
 # Executables
+tedapp/send/bin
 *.exe
 *.out
 *.app
