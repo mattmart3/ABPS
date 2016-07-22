@@ -1,7 +1,7 @@
 This README explains how to to build a custom kernel with the support for TED (Transmission Error Detector) 
 and how to test it with the TED application. Different build methods are needed whether you
- want to build the TED kernel for a GNU Linux distribution or Android as for the latter some particular 
-steps are required.
+ want to build the TED kernel for a GNU Linux distribution or Android distribution, since some additional 
+steps are required for the latter.
 
 #Kernel build
 ##Linux
