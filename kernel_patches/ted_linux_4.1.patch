@@ -71,7 +71,7 @@ index fc57f6b..6de89a1 100644
 +
  #endif /* MAC80211_H */
 diff --git a/include/uapi/linux/errqueue.h b/include/uapi/linux/errqueue.h
-index 07bdce1..3bf3b8f 100644
+index 07bdce1..1e61d31 100644
 --- a/include/uapi/linux/errqueue.h
 +++ b/include/uapi/linux/errqueue.h
 @@ -11,6 +11,7 @@ struct sock_extended_err {
@@ -82,7 +82,7 @@ index 07bdce1..3bf3b8f 100644
  };
  
  #define SO_EE_ORIGIN_NONE	0
-@@ -19,9 +20,41 @@ struct sock_extended_err {
+@@ -19,6 +20,7 @@ struct sock_extended_err {
  #define SO_EE_ORIGIN_ICMP6	3
  #define SO_EE_ORIGIN_TXSTATUS	4
  #define SO_EE_ORIGIN_TIMESTAMPING SO_EE_ORIGIN_TXSTATUS
@@ -90,40 +90,6 @@ index 07bdce1..3bf3b8f 100644
  
  #define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
  
-+/* TED */
-+/* TED convenient wrapper APIs for First-hop Transmission Notification. */
-+
-+/* TED identifier of the datagram whose notification refers to. */
-+#define ted_msg_id(notification) \
-+			((struct sock_extended_err *) notification)->ee_info
-+
-+/* Message status to the first hop.
-+   Return 1 if the message was successfully delivered to the AP, 0 otherwise. */
-+#define ted_status(notification) \
-+			((struct sock_extended_err *) notification)->ee_type
-+
-+/* Returns the number of times that the packet, 
-+   associated to the notification provided, was retrasmitted to the AP.  */
-+#define ted_retry_count(notification) \
-+			((struct sock_extended_err *) notification)->ee_retry_count
-+
-+/* Returns the fragment length */
-+#define ted_fragment_length(notification) \
-+			(((struct sock_extended_err *) notification)->ee_data >> 16)
-+
-+/* Returns the offset of the current message 
-+   associated with the notification from the original message. */
-+#define ted_fragment_offset(notification) \
-+			((((struct sock_extended_err *) notification)->ee_data << 16) >> 16)
-+
-+/* Indicates if there is more fragment with the same TED identifier */
-+#define ted_more_fragment(notification) \
-+			((struct sock_extended_err *) notification)->ee_code
-+/* end TED */
-+
- /**
-  *	struct scm_timestamping - timestamps exposed through cmsg
-  *
 diff --git a/include/uapi/linux/socket.h b/include/uapi/linux/socket.h
 index 76ab0c6..7425694 100644
 --- a/include/uapi/linux/socket.h
