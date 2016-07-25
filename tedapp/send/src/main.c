@@ -79,6 +79,7 @@ void gen_random(char *s, const int len) {
 		s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
 	}
 
+	/* Zero terminate the string */
 	s[len] = 0;
 }
 
@@ -88,13 +89,12 @@ char * new_msg(void)
 	char *content;
 
 	/* Init the message content space */
-	content = (char *)malloc(conf.msg_length * sizeof(char));
+	content = (char *)malloc(conf.msg_length + 1 * sizeof(char));
 	if (content == NULL)
 		utils_exit_error("%s: malloc failed", __func__);
 
 	/* Fill the message content */
-	gen_random(content, conf.msg_length - 1);
-	
+	gen_random(content, conf.msg_length);
 	
 	return content;
 }
@@ -103,29 +103,30 @@ char * new_msg(void)
 void send_new_msg(hashtable *ht/*GHashTable *ht*/)
 {
 	uint32_t identifier;
-	//int *hash_key;
 	struct msg_info_s *info;
 	char *buffer;
+	int buffer_len;
 
-	/* Compose a new message and sent it */
+	/* Compose a new message and send it */
 	buffer = new_msg();
-	net_sendmsg(buffer, strlen(buffer), &identifier);
+	buffer_len = (int)strlen(buffer);
+	if (buffer_len != conf.msg_length)
+		utils_exit_error("%s: bad buffer length\n", __func__);
+
+	net_sendmsg(buffer, buffer_len, &identifier);
 	printf("-----------------------------------------------------"
-	       "----------------\n\t\t\t\t\tSent pkt ID: %d\n\t\t\t\t\tsize: %ld\n", 
-	       identifier, (unsigned long int)strlen(buffer));
-	//printf("%s\n", buffer);
+	       "----------------\n\t\t\t\t\tSent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
+	       identifier, buffer_len);
 
-	//hash_key = g_new0(gint, 1);
-	//*hash_key = identifier;
-
-	//info = g_new0(struct msg_info_s, 1);
 	info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
-	info->size = strlen(buffer);
+	if (info == NULL)
+		utils_exit_error("%s: malloc failed", __func__);
+
+	info->size = buffer_len;
 	info->id = identifier;
 	info->n_frags = 0;
 	info->last_frag_received = 0;
 
-	//g_hash_table_insert(ht, hash_key, info);
 	HASH((*ht), identifier, info);
 
 	free(buffer);

@@ -200,13 +200,16 @@ int net_check_ip_instance_and_version(void)
 		return IPPROTO_IP;
 }
 
-int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
+int net_sendmsg(char *buffer, int length, uint32_t *id_pointer)
 {
 	int result_value, ip_vers;
 	struct iovec iov[1];
 	struct msghdr msg_header;
 	struct cmsghdr *cmsg;
-
+	char cbuf[CMSG_SPACE(sizeof(id_pointer))];
+	
+	memset(cbuf, '\0', sizeof(cbuf));
+	
 	iov[0].iov_base = (void *) buffer;
 	iov[0].iov_len = length;
 
@@ -229,12 +232,13 @@ int net_sendmsg(const char *buffer, int length, uint32_t *id_pointer)
 
 	msg_header.msg_iov = iov;
 	msg_header.msg_iovlen = 1;
+	msg_header.msg_control = cbuf;
+	msg_header.msg_controllen = sizeof(cbuf);
 
 	cmsg = CMSG_FIRSTHDR(&msg_header);
 
 	cmsg->cmsg_level = SOL_UDP;
 	cmsg->cmsg_type = TED_CMSG_TYPE;
-
 	cmsg->cmsg_len = CMSG_LEN(sizeof(id_pointer));
 
 	/* Copy the address of our user space pointer (id_pointer)
