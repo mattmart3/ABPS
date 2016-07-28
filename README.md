@@ -177,16 +177,16 @@ In my case this is the output:
 
 ```
 Boot header
-  flash page size2048
-  kernel size0x86e968
-  kernel load addr0x8000
-  ramdisk size20480x12dab8
-  ramdisk load addr0x80000x2900000
-  second size0x86e9680x0
-  second load addr0x80000x29000000xf00000
-  tags addr0x80000x29000000x2700000
-  product name''
-  kernel cmdline'console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 maxcpus=2 msm_watchdog_v2.enable=1'
+  flash page size	2048
+  kernel size		0x86e968
+  kernel load addr	0x8000
+  ramdisk size		0x12dab8
+  ramdisk load addr	0x2900000
+  second size		0x0
+  second load addr	0xf00000
+  tags addr			0x2700000
+  product name		''
+  kernel cmdline	'console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 maxcpus=2 msm_watchdog_v2.enable=1'
 
 zImage extracted
 ramdisk offset 8845312 (0x86f800)
