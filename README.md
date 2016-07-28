@@ -224,8 +224,11 @@ Note how the offsets correspond to the addresses printed out by the boot image e
 ####Enable wlan1 in system files
 Editing the init rc file it's not enough, as some other android services still refer to the wlan0 device.
 
-You need to do the substitution of ``wlan0`` with ``wlan1`` also in the files ``/system/buil.prop`` and ``/system/etc/dhcpcd/dhcpcd.conf``.
+You need to do the substitution of ``wlan0`` with ``wlan1`` also in the files ``/system/build.prop`` and ``/system/etc/dhcpcd/dhcpcd.conf``.
 These files are persistent in the android root filesystem thus you just need to edit them once.
+
+Also you need to copy the firmware of your WiFi dongle in /system/etc/firmware. You can copy directly from your working machine
+ or from the official repository http://git.kernel.org/cgit/linux/kernel/git/firmware/linux-firmware.git .
 
 At the end you can boot the custom boot.img with fastboot:
 	
