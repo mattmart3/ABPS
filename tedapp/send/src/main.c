@@ -45,8 +45,10 @@ OPTIONS:\n\
     -h, --help                Print this help.\n\
     -6, --ipv6                Use IPv6 (IPv4 default).\n\
                                   Interface argument MUST be specified (-i).\n\
-    -i, --iface=NIC_NAME      Declare the network interface associated\n\
-                                  to the specified ip address.\n\
+    -b, --bind_iface          Bind the socket to the specified network interface.\n\
+                                  Interface argument MUST be specified (-i). \n\
+    -i, --iface=NIC_NAME      Specify the network interface to be used.\n\
+                              More interfaces can be specified repeating this option.\n\
     -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
     -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n"
 
@@ -286,10 +288,13 @@ int main(int argc, char **argv)
 
 		utils_exit_error("Some required argument is missing.\n\n" 
 		                 "%s", usage);
-	} else if (conf.ip_vers == IPPROTO_IPV6 && conf.iface_name == NULL) { 
+	} else if (conf.ip_vers == IPPROTO_IPV6 && conf.nifaces == 0) { 
 
-		utils_exit_error("Interface MUST be specified while using IPv6 "
+		utils_exit_error("Interface(s) MUST be specified while using IPv6 "
 		                 "(see '-i' option).\n\n%s", usage);
+	} else if (conf.bind_iface && conf.nifaces == 0) {
+		utils_exit_error("The interface(s) which the socket(s) should "
+				 "bind to, MUST be specified (see '-i' option).");
 	} else {
 		address = argv[optind++];
 		port = atoi(argv[optind++]);
@@ -297,11 +302,13 @@ int main(int argc, char **argv)
 
 	free(usage);
 
+
+	/* TODO: need to consider more interfaces */
 	if (conf.ip_vers == IPPROTO_IPV6) 
-		net_init_ipv6_shared_instance(conf.iface_name, address, port);
+		net_init_ipv6_shared_instance(conf.ifaces[0].iface_name, address, port);
 	else 
 		net_init_ipv4_shared_instance(address, port);
-
+	
 
 	/* Init epoll for handling events of the shared socket descriptor */
 	epollfd = epoll_init(net_get_shared_descriptor());

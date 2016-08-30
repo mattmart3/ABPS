@@ -33,8 +33,20 @@
 /* Configuration data */
 struct conf_s {
 	int ip_vers;
+	int bind_iface;
 	int n_packets;
 	int msg_length;
+	int nifaces;
+	struct iface_s {
+		char *iface_name;
+		int iface_name_length;
+	} ifaces[MAX_IFACES];
+
+};
+
+
+struct socket_s {
+	int sd;
 	char *iface_name;
 	int iface_name_length;
 };

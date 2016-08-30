@@ -23,6 +23,8 @@
 #ifndef CONSTS_H
 #define CONSTS_H
 
+#define MAX_IFACES 3
+
 #define DEFAULT_N_PACKETS 5000
 #define DEFAULT_MSG_LENGTH 1050 
 

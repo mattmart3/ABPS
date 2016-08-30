@@ -54,11 +54,16 @@ void utils_exit_error(const char *fmt, ...)
 /* Init default configuration */
 void utils_default_conf(void)
 {
+	int i;
 	conf.ip_vers = IPPROTO_IP;
+	conf.bind_iface = 0;
 	conf.n_packets = DEFAULT_N_PACKETS; 
 	conf.msg_length = DEFAULT_MSG_LENGTH;
-	conf.iface_name = NULL;
-	conf.iface_name_length = 0;
+	conf.nifaces = 0;
+	for (i = 0; i < MAX_IFACES; i++) {
+		conf.ifaces[i].iface_name = NULL;
+		conf.ifaces[i].iface_name_length = 0;
+	}
 }
 
 int utils_get_opt(int argc, char **argv) 
@@ -67,18 +72,19 @@ int utils_get_opt(int argc, char **argv)
 	for (;;) {
 
 		int option_index = 0;
-		int c;
+		int c, len;
 
 		static struct option long_options[] = {
 			{ "help", no_argument, 0, 'h' },
 			{ "ipv6", no_argument, 0, '6'},
+			{ "bind_iface", no_argument, 0, 'b'},
 			{ "iface", required_argument, 0, 'i'},
 			{ "npkts", required_argument, 0, 'n'},
 			{ "size", required_argument, 0, 's'},
 			{ 0, 0, 0, 0 },
 		};
 
-		c = getopt_long(argc, argv, "h6i:n:s:",
+		c = getopt_long(argc, argv, "h6bi:n:s:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -86,12 +92,21 @@ int utils_get_opt(int argc, char **argv)
 			case '6':
 				conf.ip_vers = IPPROTO_IPV6;
 				break;
+			case 'b':
+				conf.bind_iface = 1;
+				break;
 			case 'i':
-				conf.iface_name_length = asprintf(&(conf.iface_name), "%s", optarg);
-				if (conf.iface_name_length == -1) { 
-					utils_print_error("%s: error in asprinf", __func__);
-					return -1;
+				if (conf.nifaces + 1 > MAX_IFACES) {
+					utils_exit_error("Too many network interfaces,"
+							  "limit is set to %d", MAX_IFACES);
 				}
+
+				len = asprintf(&(conf.ifaces[conf.nifaces].iface_name), "%s", optarg);
+				if (len == -1)
+					utils_exit_error("%s: error in asprinf", __func__);
+
+				conf.ifaces[conf.nifaces].iface_name_length = len;
+				conf.nifaces++;
 				break;
 			case 'n':
 				conf.n_packets = atoi(optarg);
