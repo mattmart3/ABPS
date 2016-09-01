@@ -30,6 +30,12 @@
 
 #include "consts.h"
 
+struct iface_s {
+	char *name;
+	int name_length;
+	int type;
+}
+
 /* Configuration data */
 struct conf_s {
 	int ip_vers;
@@ -37,18 +43,13 @@ struct conf_s {
 	int n_packets;
 	int msg_length;
 	int nifaces;
-	struct iface_s {
-		char *iface_name;
-		int iface_name_length;
-	} ifaces[MAX_IFACES];
+ 	struct iface_s ifaces[MAX_IFACES];
 
 };
 
-
 struct socket_s {
 	int sd;
-	char *iface_name;
-	int iface_name_length;
+	struct iface_s iface;
 };
 
 struct ted_info_s {

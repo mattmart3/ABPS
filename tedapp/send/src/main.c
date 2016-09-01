@@ -47,27 +47,38 @@ OPTIONS:\n\
                                   Interface argument MUST be specified (-i).\n\
     -b, --bind_iface          Bind the socket to the specified network interface.\n\
                                   Interface argument MUST be specified (-i). \n\
-    -i, --iface=NIC_NAME      Specify the network interface to be used.\n\
+    -i, --iface=[w:]NIC_NAME  Specify the network interface to be used.\n\
                               More interfaces can be specified repeating this option.\n\
+                              Adding 'w:' before the interface name,\n\
+                              it will be considered as a wlan interface.\n\
     -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
     -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n"
 
 
-int epoll_init(int sd)
+int epoll_init()
 {
 	int epollfd;
-	struct epoll_event ev;
 
 	epollfd = epoll_create1(0);
 	if (epollfd == -1) 
 		return -1;
 
-	ev.events = (EPOLLOUT | EPOLLERR | EPOLLET);
-	ev.data.fd = net_get_shared_descriptor(); 
+	return epollfd;
+}
+
+int epoll_add_socket(int epollfd, struct socket ext_sock)
+{
+	struct epoll_event ev;
+	ev.events = (EPOLLOUT | EPOLLET);
+	
+	/* Monitor socket errors only for the wifi interface */
+	if (ext_sock.iface.type == IFACE_TYPE_WLAN)
+		ev.events |= EPOLLERR;
+
+	ev.data.fd = ext_sock.sd;
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1)
 		return -1;
-
-	return epollfd;
+	return 0;
 }
 
 void gen_random(char *s, const int len) {
@@ -93,7 +104,7 @@ char * new_msg(void)
 	/* Init the message content space */
 	content = (char *)malloc(conf.msg_length + 1 * sizeof(char));
 	if (content == NULL)
-		utils_exit_error("%s: malloc failed", __func__);
+		exit_err("%s: malloc failed", __func__);
 
 	/* Fill the message content */
 	gen_random(content, conf.msg_length);
@@ -102,34 +113,56 @@ char * new_msg(void)
 }
 
 /* Send a new message requesting an identifier for TED. Check net_sendmsg(). */
-void send_new_msg(hashtable *ht/*GHashTable *ht*/)
+void send_new_msg(hashtable *ht, struct socket_s ext_sock)
 {
 	uint32_t identifier;
 	struct msg_info_s *info;
 	char *buffer;
-	int buffer_len;
+	int buffer_len, sent_bytes;
 
 	/* Compose a new message and send it */
 	buffer = new_msg();
 	buffer_len = (int)strlen(buffer);
 	if (buffer_len != conf.msg_length)
-		utils_exit_error("%s: bad buffer length\n", __func__);
+		exit_err("%s: bad buffer length\n", __func__);
 
-	net_sendmsg(buffer, buffer_len, &identifier);
-	printf("-----------------------------------------------------"
-	       "----------------\n\t\t\t\t\tSent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
-	       identifier, buffer_len);
+	if (ext_sock.iface.type == IFACE_TYPE_WLAN) {
+		sent_bytes = net_send_ted_msg(buffer, buffer_len, &identifier, ext_sock.sd);
+		if (sent_bytes < 0) {
+			print_err("%s: Sendmsg error (%s).\n",
+				  __func__, strerror(errno));
+		} else if (sent_bytes != buffer_len) {
+			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
+				  __func__, buffer_len, sent_bytes); 
+		}
 
-	info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
-	if (info == NULL)
-		utils_exit_error("%s: malloc failed", __func__);
+		printf("----------------------------------WIFI---------------"
+		       "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
+		       ext_sock.iface.name, identifier, buffer_len);
 
-	info->size = buffer_len;
-	info->id = identifier;
-	info->n_frags = 0;
-	info->last_frag_received = 0;
+		info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
+		if (info == NULL)
+			exit_err("%s: malloc failed", __func__);
 
-	HASH((*ht), identifier, info);
+		info->size = buffer_len;
+		info->id = identifier;
+		info->n_frags = 0;
+		info->last_frag_received = 0;
+
+		HASH((*ht), identifier, info);
+	} else {
+		send_bytes = net_send_msg(buffer, buffer_len, sd);
+		if (sent_bytes < 0) {
+			print_err("%s: Sendmsg error (%s).\n",
+				  __func__, strerror(errno));
+		} else if (sent_bytes != buffer_len) {
+			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
+				  __func__, buffer_len, sent_bytes); 
+
+		printf("-----------------------------------------------------"
+		       "----------------\n\t\t\t\t\t%s: sent pkt, size: %d\n", 
+		       ext_sock.iface.name, identifier, buffer_len);
+		}
 
 	free(buffer);
 }
@@ -199,20 +232,26 @@ void hash_table_remove(struct msg_info_s *msg_origin,
 
 }
 /* Receive all the ted notification error that are pending in the errqueue */
-void recv_ted_errors(hashtable *ht/*GHashTable *ht*/)
+void recv_ted_errors(hashtable *ht, struct sock_s ext_sock)
 {
 	struct err_msg_s *error_message;
 
+	if (ext_sock.iface.type != IFACE_TYPE_WLAN) {
+		print_err("%s: Unexpected ted notification for a non wlan iface socket.\n"
+			  "Skipping it.\n", __func__);
+		return;
+	}
+
 	/* Receive all the notifications in the errqueue.
 	 * tederror_recv_nowait returns false if the errqueue is empty. */
-	while (tederror_recv_nowait(&error_message) > 0) {
+	while (net_recv_ted_msg(&error_message, ext_sock.sd) > 0) {
 		struct ted_info_s *ted_info;
 		struct msg_info_s *msg_origin;
 		int key;
 
 		ted_info = (struct ted_info_s *)malloc(sizeof(struct ted_info_s));
 		if (ted_info == NULL) 
-			utils_exit_error("malloc error in %s\n", __func__);
+			exit_err("malloc error in %s\n", __func__);
 
 		tederror_check_ted_info(error_message, ted_info);
 
@@ -232,7 +271,7 @@ void recv_ted_errors(hashtable *ht/*GHashTable *ht*/)
 		//msg_origin = g_hash_table_lookup(ht, key);
 		msg_origin = GET_HASH((*ht), key, NULL);
 		if (msg_origin == NULL) {
-			utils_print_error("No key %d in the ht\n", key);
+			exit_err("%s:No key %d in the ht\n", __func__, key);
 
 		} else if (ted_info->more_frag == 0 &&
 		           ted_info->frag_offset == 0) {
@@ -263,7 +302,17 @@ void recv_ted_errors(hashtable *ht/*GHashTable *ht*/)
 
 }
 
+struct socket_s *get_sock_struct(struct socket_s socks[], int n, int sd)
+{
+	int i;
+	for (i = 0; i < n; i++)
+		if (socks[i].sd == sd)
+			return &(socks[i]);
 
+	return NULL;
+}
+
+/* TODO: pass the sock structs by their pointers */
 int main(int argc, char **argv)
 {
 
@@ -271,12 +320,19 @@ int main(int argc, char **argv)
 	int port;
 	int i, idx; 
 	int epollfd, nfds;
+	int sd;
 	struct epoll_event events[MAX_EPOLL_EVENTS];
-	//GHashTable *hashtb;
+	struct socket_s ext_socks[MAX_IFACES];
+	int n_ext_socks;
+	int wlan_sock_id;
+
 	hashtable *hashtb;
 
 	address = NULL;
 	port = -1;
+	n_ext_socks = 0;
+	wlan_sock_id = -1;
+	memset(&ext_socks, 0, sizeof(ext_socks) * MAX_IFACES);
 
 	asprintf(&usage, "Usage: %s %s", basename(argv[0]), USAGE);
 	
@@ -286,15 +342,17 @@ int main(int argc, char **argv)
 	/* Arguments validation */
 	if (utils_get_opt(argc, argv) == -1 || argc - optind < 2) {
 
-		utils_exit_error("Some required argument is missing.\n\n" 
-		                 "%s", usage);
+		exit_err("Some required argument is missing.\n\n%s", usage);
+
 	} else if (conf.ip_vers == IPPROTO_IPV6 && conf.nifaces == 0) { 
 
-		utils_exit_error("Interface(s) MUST be specified while using IPv6 "
-		                 "(see '-i' option).\n\n%s", usage);
+		exit_err("Interface(s) MUST be specified while using IPv6 "
+		         "(see '-i' option).\n\n%s", usage);
+
 	} else if (conf.bind_iface && conf.nifaces == 0) {
-		utils_exit_error("The interface(s) which the socket(s) should "
-				 "bind to, MUST be specified (see '-i' option).");
+
+		exit_err("The interface(s) which the socket(s) should bind to, "
+			 "MUST be specified (see '-i' option).\n\n%s", usage);
 	} else {
 		address = argv[optind++];
 		port = atoi(argv[optind++]);
@@ -302,20 +360,57 @@ int main(int argc, char **argv)
 
 	free(usage);
 
+	/* Create and initialize an "external" socket (which communicates with 
+	 * the outside world) per each interface. For now we can handle only
+	 * one wlan interface. */
+	if (conf.nifaces > 0) {
+		for (i = 0; i < conf.nifaces ; i++) {
+			printf("%s %d %d\n", conf.ifaces[i].name, 
+				conf.ifaces[i].name_length, conf.ifaces[i].type);
 
-	/* TODO: need to consider more interfaces */
-	if (conf.ip_vers == IPPROTO_IPV6) 
-		net_init_ipv6_shared_instance(conf.ifaces[0].iface_name, address, port);
-	else 
-		net_init_ipv4_shared_instance(address, port);
-	
+			/* Check which one is the wifi interface */
+			if (conf.ifaces[i].type == IFACE_TYPE_WLAN) {
+				if (wlan_sock_id >= 0) {
+					exit_err("%s: Only one wlan iface is allowed.\n"
+					         __func__);
+				} else {
+					wlan_sock_id = i;
+				}
+			}
+				
+			sd = net_create_socket(conf.ip_vers, address, port,
+					       ifaces[i].name, conf.bind_iface);
+			if (sd < 0)
+				exit_err("%s: Can't create socket\n", __func__);
+
+			ext_socks[i].sd = sd;
+			ext_socks[i].iface = conf.ifaces[i];
+			n_ext_socks++;
+		}
+		if (n_ext_socks != conf.nifaces) 
+			exit_err("%s: Sockets count and ifaces count mismatch.\n",
+				 __func__);
+	} else {
+		sd = net_create_socket(conf.ip_vers, address, port, NULL, 0);
+		if (sd < 0)
+			exit_err("%s: Can't create socket\n", __func__);
+		ext_socks[0].sd = sd;
+		n_ext_socks = 1;
+	}
 
 	/* Init epoll for handling events of the shared socket descriptor */
-	epollfd = epoll_init(net_get_shared_descriptor());
+	epollfd = epoll_init();
 	if (epollfd == -1)
-		utils_exit_error("init epoll failed on sd");
+		exit_err("%s: Init epoll failed on sd", __func__);
+
+	for (i = 0; i < n_ext_socks; i++) {
+		if (epoll_add_socket(epollfd, ext_socks[i]) < 0) {
+			exit_err("%s: Can't register socket %d in epoll\n",
+				  __func__, ext_socks[i].sd);
+		}
+
+	}
 	
-	//hashtb = g_hash_table_new(g_int_hash, g_int_equal);
 	hashtb = (hashtable *)malloc(sizeof(hashtable));
 	HASH_INIT((*hashtb), HASH_SIZE_DEFAULT);
 
@@ -324,24 +419,40 @@ int main(int argc, char **argv)
 	 * If an EPOLLOUT event is triggered a new message can be sent.
 	 * If an EPOLLERR event is triggered some ted error message 
 	 * may be present in the errqueue. */
+	struct socket_s *ext_sock;
 	for (;;) {
 
 		nfds = epoll_wait(epollfd, events, MAX_EPOLL_EVENTS, -1);
 		if (nfds == -1)
-			utils_exit_error("epoll_wait error\n");
+			exit_err("epoll_wait error\n");
 		
 		for (i = 0; i < nfds; i++) {
 
 			/* Send a new message if the socket is ready for writing */
 			if (events[i].events & EPOLLOUT && idx < conf.n_packets) {
-				send_new_msg(hashtb);
+				ext_sock = get_sock_struct(events[i].data.fd);
+				if (!ext_sock) {
+					print_err("%s: EPOLLOUT, unexpected socked id, skipping\n",
+						  __func__);
+					continue;
+				}
+				send_new_msg(hashtb, ext_sock);
 				idx++;
 			}
 
 			/* If there are pending TED error messages 
-			 * in the errqueue, receive them and print TED infos. */
-			if (events[i].events & EPOLLERR)
-				recv_ted_errors(hashtb);
+			 * in the errqueue, receive them and print TED infos.
+			 * We expect only the socket correspondin to the wifi 
+			 * interface here. */
+			if (events[i].events & EPOLLERR) {
+				ext_sock = get_sock_struct(events[i].data.fd);
+				if (!ext_sock || ext_sock.iface.type != IFACE_TYPE_WLAN) {
+					print_err("%s: EPOLLERR, unexpected socked id, skipping\n",
+						  __func__);
+					continue;
+				} 
+				recv_ted_errors(hashtb, ext_sock);
+			}
 		}
 	}
 

@@ -73,23 +73,6 @@
 			((struct sock_extended_err *) notification)->ee_code
 /* end TED */
 
-struct err_msg_s *alloc_init_ErrMsg(void)
-{
-	struct err_msg_s *em;
-	em = (struct err_msg_s *) malloc(sizeof(struct err_msg_s));
-
-	if(em == NULL) {
-		return(NULL);
-	} else {
-		memset(&(em->msg),0,sizeof(em->msg));
-		memset(&(em->errmsg),0,sizeof(em->errmsg));
-		em->lenrecv=0;
-		em->myerrno=0;
-
-		return(em);
-	}
-}
-
 
 /* Get TED information of an error message */
 void __get_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info) 
@@ -104,107 +87,7 @@ void __get_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 	ted_info->msg_pload = emsg->errmsg;
 }
 
-int tederror_recv_nowait(struct err_msg_s **error_message)
-{
-	
-	int return_value, ip_vers, shared_descriptor;
 
-	struct sockaddr *addr;
-	struct iovec iov[1];
-	struct err_msg_s *em;
-
-
-	addr = NULL;
-	*error_message = alloc_init_ErrMsg();	
-	em = *error_message;
-
-	iov[0].iov_base = em->errmsg;
-	iov[0].iov_len = sizeof(em->errmsg);
-
-
-
-	if ((ip_vers = net_check_ip_instance_and_version()) == -1)
-		return -1;
-
-	if (ip_vers == IPPROTO_IPV6) {
-
-		memset(&(em->name.ipv6_name), 0, sizeof(em->name.ipv6_name));
-		em->name.ipv6_name.sin6_family = AF_INET6;
-		em->namelen = sizeof(em->name.ipv6_name);
-		em->is_ipv6 = 1;
-		
-		addr = (struct sockaddr *)&(em->name.ipv6_name);
-		
-	} else if (ip_vers == IPPROTO_IP) {
-
-		memset(&(em->name.ipv4_name),0,sizeof(em->name.ipv4_name));
-		em->name.ipv4_name.sin_family = AF_INET;
-		em->namelen = sizeof(em->name.ipv4_name);
-		em->is_ipv6 = 0;
-
-		addr = (struct sockaddr *)&(em->name.ipv4_name);
-
-	} else {
-		utils_print_error("%s: wrong ip_vers.\n", __func__);	
-		return -1;
-	}
-	
-	shared_descriptor = net_get_shared_descriptor();
-
-	return_value = getsockname(shared_descriptor, addr, (socklen_t *)&(em->namelen));
-	
-	if(return_value != 0) {
-		utils_print_error("%s: getsockname failed (%s).\n",
-		                  __func__, strerror(errno));
-		return 0;
-	}
-
-	do
-	{
-		/*XXX: name can be omitted (NULL) for local error msg (see man) */
-		memset(&(em->msg),0,sizeof(em->msg));
-		em->msg->msg_name = &(em->name);
-		em->msg->msg_namelen = sizeof(em->name);
-		em->msg->msg_iov = iov;
-		em->msg->msg_iovlen = 1;
-		em->msg->msg_control = em->control;
-		em->msg->msg_controllen = sizeof(em->control);
-		return_value = recvmsg(shared_descriptor, em->msg, MSG_ERRQUEUE | MSG_DONTWAIT); 
-		em->myerrno=errno;
-	} while ((return_value < 0) && ((em->myerrno == EINTR)));
-
-	int ret;
-	ret = 0;
-
-	if (return_value < 0) {
-		if (em->myerrno == EAGAIN) {
-			/* No message available on error queue. */
-			ret = 0;
-		} else {
-			errno = em->myerrno;
-			utils_print_error("%s: recvmsg failed with error (%s).\n",
-					__func__, strerror(errno));
-		 	ret = -1;
-		}
-	} else if ((em->msg->msg_flags & MSG_ERRQUEUE) != MSG_ERRQUEUE) {
-
-		printf("recvmsg: no errqueue\n");
-		ret =  0;
-
-	} else if (em->msg->msg_flags & MSG_CTRUNC) {
-
-		printf("recvmsg: extended error was truncated\n");
-		ret = 0;
-
-	} else {
-		ret = 1; // read, ok
-	}
-
-	if (ret <= 0) 
-		free(em);
-
-	return ret;
-}
 
 int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 {
