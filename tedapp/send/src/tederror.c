@@ -91,6 +91,8 @@ void __get_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 
 int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 {
+	int there_is_ted = 0;
+
 	/* For each error header of the previuosly sent message, 
 	 * look for TED notifications. */
 	for (emsg->c = CMSG_FIRSTHDR(emsg->msg); 
@@ -121,6 +123,7 @@ int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 			case SO_EE_ORIGIN_LOCAL_NOTIFY: 
 				if(emsg->ee->ee_errno == 0) {
 					__get_ted_info(emsg, ted_info);
+					there_is_ted = 1;
 				} else {
 					//TODO: handle errno for local notify
 				}
@@ -133,7 +136,7 @@ int tederror_check_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 		}
 	}
 
-	return 0;
+	return there_is_ted;
 }
 
 

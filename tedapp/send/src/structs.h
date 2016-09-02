@@ -34,7 +34,7 @@ struct iface_s {
 	char *name;
 	int name_length;
 	int type;
-}
+};
 
 /* Configuration data */
 struct conf_s {

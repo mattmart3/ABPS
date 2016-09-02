@@ -63,7 +63,7 @@ void utils_default_conf(void)
 	for (i = 0; i < MAX_IFACES; i++) {
 		conf.ifaces[i].name = NULL;
 		conf.ifaces[i].name_length = 0;
-		conf.ifaces[i].type = IFACE_TYPE_UNSPECIFIED;;
+		conf.ifaces[i].type = IFACE_TYPE_UNSPEC;
 	}
 }
 
@@ -98,7 +98,7 @@ int utils_get_opt(int argc, char **argv)
 				break;
 			case 'i':
 				if (conf.nifaces + 1 > MAX_IFACES) {
-					utils_exit_error("Too many network interfaces,"
+					exit_err("Too many network interfaces,"
 							  "limit is set to %d", MAX_IFACES);
 				}
 
@@ -108,7 +108,7 @@ int utils_get_opt(int argc, char **argv)
 				}
 				len = asprintf(&(conf.ifaces[conf.nifaces].name), "%s", optarg);
 				if (len == -1)
-					utils_exit_error("%s: error in asprinf", __func__);
+					exit_err("%s: error in asprinf", __func__);
 
 				conf.ifaces[conf.nifaces].name_length = len;
 				conf.nifaces++;

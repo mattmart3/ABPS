@@ -29,8 +29,8 @@
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <libgen.h>
-//#include <glib.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "network.h"
 #include "tederror.h"
@@ -66,16 +66,16 @@ int epoll_init()
 	return epollfd;
 }
 
-int epoll_add_socket(int epollfd, struct socket ext_sock)
+int epoll_add_socket(int epollfd, struct socket_s *ext_sock)
 {
 	struct epoll_event ev;
 	ev.events = (EPOLLOUT | EPOLLET);
 	
 	/* Monitor socket errors only for the wifi interface */
-	if (ext_sock.iface.type == IFACE_TYPE_WLAN)
+	if (ext_sock->iface.type == IFACE_TYPE_WLAN)
 		ev.events |= EPOLLERR;
 
-	ev.data.fd = ext_sock.sd;
+	ev.data.fd = ext_sock->sd;
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1)
 		return -1;
 	return 0;
@@ -113,7 +113,7 @@ char * new_msg(void)
 }
 
 /* Send a new message requesting an identifier for TED. Check net_sendmsg(). */
-void send_new_msg(hashtable *ht, struct socket_s ext_sock)
+void send_new_msg(hashtable *ht, struct socket_s *ext_sock)
 {
 	uint32_t identifier;
 	struct msg_info_s *info;
@@ -126,44 +126,45 @@ void send_new_msg(hashtable *ht, struct socket_s ext_sock)
 	if (buffer_len != conf.msg_length)
 		exit_err("%s: bad buffer length\n", __func__);
 
-	if (ext_sock.iface.type == IFACE_TYPE_WLAN) {
-		sent_bytes = net_send_ted_msg(buffer, buffer_len, &identifier, ext_sock.sd);
+	if (ext_sock->iface.type == IFACE_TYPE_WLAN) {
+		sent_bytes = net_send_ted_msg(buffer, buffer_len, &identifier, ext_sock->sd);
 		if (sent_bytes < 0) {
 			print_err("%s: Sendmsg error (%s).\n",
 				  __func__, strerror(errno));
 		} else if (sent_bytes != buffer_len) {
 			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
 				  __func__, buffer_len, sent_bytes); 
+		} else {
+
+			printf("----------------------------------WIFI---------------"
+			       "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
+		       ext_sock->iface.name, identifier, sent_bytes);
+
+			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
+			if (info == NULL)
+				exit_err("%s: malloc failed", __func__);
+
+			info->size = buffer_len;
+			info->id = identifier;
+			info->n_frags = 0;
+			info->last_frag_received = 0;
+
+			HASH((*ht), identifier, info);
 		}
-
-		printf("----------------------------------WIFI---------------"
-		       "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
-		       ext_sock.iface.name, identifier, buffer_len);
-
-		info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
-		if (info == NULL)
-			exit_err("%s: malloc failed", __func__);
-
-		info->size = buffer_len;
-		info->id = identifier;
-		info->n_frags = 0;
-		info->last_frag_received = 0;
-
-		HASH((*ht), identifier, info);
 	} else {
-		send_bytes = net_send_msg(buffer, buffer_len, sd);
+		sent_bytes = net_send_msg(buffer, buffer_len, ext_sock->sd);
 		if (sent_bytes < 0) {
 			print_err("%s: Sendmsg error (%s).\n",
 				  __func__, strerror(errno));
 		} else if (sent_bytes != buffer_len) {
 			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
 				  __func__, buffer_len, sent_bytes); 
-
-		printf("-----------------------------------------------------"
-		       "----------------\n\t\t\t\t\t%s: sent pkt, size: %d\n", 
-		       ext_sock.iface.name, identifier, buffer_len);
+		} else {
+			printf("-----------------------------------------------------"
+			       "----------------\n\t\t\t\t\t%s: sent pkt, size: %d\n", 
+			       ext_sock->iface.name, sent_bytes);
 		}
-
+	}
 	free(buffer);
 }
 
@@ -232,28 +233,27 @@ void hash_table_remove(struct msg_info_s *msg_origin,
 
 }
 /* Receive all the ted notification error that are pending in the errqueue */
-void recv_ted_errors(hashtable *ht, struct sock_s ext_sock)
+void recv_errors(hashtable *ht, struct socket_s *ext_sock)
 {
 	struct err_msg_s *error_message;
 
-	if (ext_sock.iface.type != IFACE_TYPE_WLAN) {
-		print_err("%s: Unexpected ted notification for a non wlan iface socket.\n"
-			  "Skipping it.\n", __func__);
-		return;
-	}
-
 	/* Receive all the notifications in the errqueue.
 	 * tederror_recv_nowait returns false if the errqueue is empty. */
-	while (net_recv_ted_msg(&error_message, ext_sock.sd) > 0) {
+	while (net_recv_err(&error_message, ext_sock->sd) > 0) {
 		struct ted_info_s *ted_info;
 		struct msg_info_s *msg_origin;
-		int key;
+		int key, there_is_ted;
 
 		ted_info = (struct ted_info_s *)malloc(sizeof(struct ted_info_s));
 		if (ted_info == NULL) 
 			exit_err("malloc error in %s\n", __func__);
 
-		tederror_check_ted_info(error_message, ted_info);
+		there_is_ted = tederror_check_ted_info(error_message, ted_info);
+
+		if (!there_is_ted) {
+			printf("Not a ted notification, do nothing\n");
+			continue;
+		}
 
 		printf("-------------------------------------------------"
 		       "--------------------\nTED notified ID: %d \n",
@@ -312,10 +312,8 @@ struct socket_s *get_sock_struct(struct socket_s socks[], int n, int sd)
 	return NULL;
 }
 
-/* TODO: pass the sock structs by their pointers */
 int main(int argc, char **argv)
 {
-
 	char *usage, *address;
 	int port;
 	int i, idx; 
@@ -371,7 +369,7 @@ int main(int argc, char **argv)
 			/* Check which one is the wifi interface */
 			if (conf.ifaces[i].type == IFACE_TYPE_WLAN) {
 				if (wlan_sock_id >= 0) {
-					exit_err("%s: Only one wlan iface is allowed.\n"
+					exit_err("%s: Only one wlan iface is allowed.\n",
 					         __func__);
 				} else {
 					wlan_sock_id = i;
@@ -379,7 +377,7 @@ int main(int argc, char **argv)
 			}
 				
 			sd = net_create_socket(conf.ip_vers, address, port,
-					       ifaces[i].name, conf.bind_iface);
+					       conf.ifaces[i].name, conf.bind_iface);
 			if (sd < 0)
 				exit_err("%s: Can't create socket\n", __func__);
 
@@ -396,6 +394,13 @@ int main(int argc, char **argv)
 			exit_err("%s: Can't create socket\n", __func__);
 		ext_socks[0].sd = sd;
 		n_ext_socks = 1;
+		
+		/* If there is no interface specified, assume the wifi interface
+		 * is used */
+		printf("I hope you are routing out through a wifi device, "
+		       "or this doesn't make any sense.\n\n");
+
+		ext_socks[0].iface.type = IFACE_TYPE_WLAN;
 	}
 
 	/* Init epoll for handling events of the shared socket descriptor */
@@ -404,7 +409,7 @@ int main(int argc, char **argv)
 		exit_err("%s: Init epoll failed on sd", __func__);
 
 	for (i = 0; i < n_ext_socks; i++) {
-		if (epoll_add_socket(epollfd, ext_socks[i]) < 0) {
+		if (epoll_add_socket(epollfd, &(ext_socks[i])) < 0) {
 			exit_err("%s: Can't register socket %d in epoll\n",
 				  __func__, ext_socks[i].sd);
 		}
@@ -430,9 +435,10 @@ int main(int argc, char **argv)
 
 			/* Send a new message if the socket is ready for writing */
 			if (events[i].events & EPOLLOUT && idx < conf.n_packets) {
-				ext_sock = get_sock_struct(events[i].data.fd);
+				ext_sock = get_sock_struct(ext_socks, n_ext_socks,
+							   events[i].data.fd);
 				if (!ext_sock) {
-					print_err("%s: EPOLLOUT, unexpected socked id, skipping\n",
+					print_err("%s: EPOLLOUT, unexpected socket id, skipping\n",
 						  __func__);
 					continue;
 				}
@@ -442,24 +448,18 @@ int main(int argc, char **argv)
 
 			/* If there are pending TED error messages 
 			 * in the errqueue, receive them and print TED infos.
-			 * We expect only the socket correspondin to the wifi 
+			 * We expect only the socket corresponding to the wifi 
 			 * interface here. */
 			if (events[i].events & EPOLLERR) {
-				ext_sock = get_sock_struct(events[i].data.fd);
-				if (!ext_sock || ext_sock.iface.type != IFACE_TYPE_WLAN) {
-					print_err("%s: EPOLLERR, unexpected socked id, skipping\n",
-						  __func__);
-					continue;
-				} 
-				recv_ted_errors(hashtb, ext_sock);
+				ext_sock = get_sock_struct(ext_socks, n_ext_socks,
+							   events[i].data.fd);
+				recv_errors(hashtb, ext_sock);
 			}
 		}
 	}
 
-	//g_hash_table_destroy(hashtb);
 	HASH_FINI((*hashtb));
 	free(hashtb);
-	net_release_shared_instance();
 
 	return 0;
 }
