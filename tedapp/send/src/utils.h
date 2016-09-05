@@ -27,6 +27,7 @@
 #include "structs.h"
 
 extern struct conf_s conf;
+extern void (*print_dbg)(const char * fmt, ...);
 
 void print_err(const char *fmt, ...);
 void exit_err(const char *fmt, ...);

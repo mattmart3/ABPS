@@ -52,7 +52,8 @@ OPTIONS:\n\
                               Adding 'w:' before the interface name,\n\
                               it will be considered as a wlan interface.\n\
     -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
-    -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n"
+    -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n\
+    -d, --debug               Enable debug messages.\n"
 
 
 int epoll_init()
@@ -427,7 +428,7 @@ int main(int argc, char **argv)
 		exit_err("%s: Init epoll failed on sd", __func__);
 
 	for (i = 0; i < n_ext_socks; i++) {
-		printf("Registering socket for iface %s\n", ext_socks[i].iface.name);
+		print_dbg("Registering socket for iface %s\n", ext_socks[i].iface.name);
 		if (epoll_add_socket(epollfd, &(ext_socks[i])) < 0) {
 			exit_err("%s: Can't register socket %d in epoll\n",
 				  __func__, ext_socks[i].sd);
@@ -449,11 +450,9 @@ int main(int argc, char **argv)
 		if (nfds == -1)
 			exit_err("epoll_wait error\n");
 		
-		printf("Epoll wakeup for %d sockets\n", nfds);
+		print_dbg("Epoll wakeup for %d sockets\n", nfds);
 		for (i = 0; i < nfds; i++) {
 
-			printf("events[i].events %x, EPOLLOUT %x, EPOLLERR %x\n",
-				events[i].events, EPOLLOUT, EPOLLERR);
 			/* Send a new message if the socket is ready for writing */
 			if (events[i].events & EPOLLOUT) {
 				ext_sock = get_sock_struct(ext_socks, n_ext_socks,

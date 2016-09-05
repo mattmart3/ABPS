@@ -36,6 +36,21 @@
 
 struct conf_s conf;
 
+
+void __print_dbg_dummy(const char *fmt, ...)
+{
+}
+
+void __print_dbg(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+}
+
+void (*print_dbg)(const char * fmt, ...) = __print_dbg_dummy;
+
 void print_err(const char *fmt, ...)
 {
 	va_list ap;
@@ -60,6 +75,7 @@ void utils_default_conf(void)
 	conf.n_packets = DEFAULT_N_PACKETS; 
 	conf.msg_length = DEFAULT_MSG_LENGTH;
 	conf.nifaces = 0;
+
 	for (i = 0; i < MAX_IFACES; i++) {
 		conf.ifaces[i].name = NULL;
 		conf.ifaces[i].name_length = 0;
@@ -82,10 +98,11 @@ int utils_get_opt(int argc, char **argv)
 			{ "iface", required_argument, 0, 'i'},
 			{ "npkts", required_argument, 0, 'n'},
 			{ "size", required_argument, 0, 's'},
+			{ "debug", no_argument, 0, 'd'},
 			{ 0, 0, 0, 0 },
 		};
 
-		c = getopt_long(argc, argv, "h6bi:n:s:",
+		c = getopt_long(argc, argv, "h6bi:n:s:d",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -118,6 +135,9 @@ int utils_get_opt(int argc, char **argv)
 				break;
 			case 's':
 				conf.msg_length = atoi(optarg);
+				break;
+			case 'd':
+				print_dbg = __print_dbg;
 				break;
 			case 'h':
 			default:
