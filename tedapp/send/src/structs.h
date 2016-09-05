@@ -49,6 +49,7 @@ struct conf_s {
 
 struct socket_s {
 	int sd;
+	int pkt_counter;
 	struct iface_s iface;
 };
 

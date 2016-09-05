@@ -263,12 +263,30 @@ void recv_errors(hashtable *ht, struct socket_s *ext_sock)
 		       "more_frag: %d, frag_len: %d, frag_off: %d\n",
 		       ted_info->msg_id, ted_info->retry_count, ted_info->status,
 		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
+		
+#if 0 /* TODO: Let's turn this in a proxy first */
+		/* We have two counters: drop (which takes also those with high retransmission) 
+		 * and sent packets which are considered in a transmission window.
+		 * If the risk/safe ratio is above a certain threshold we can 
+		 * activate the second network interface */
+		if (!ted_info->status || ted_info->retry_count > RETRY_COUNT_THRESHOLD) {
+			risk++;
+		} else {
+			safe++;
+		}
 
-		//key = g_new0(gint, 1);
-		//*key = ted_info->msg_id;
+		/* Restart the counter if we are out the window */
+		if (drop + sent > CRITIC_CHECK_WINDOW) {
+			risk = safe = multi_iface = 0;
+		}
+
+		if (((float)risk)/((float)(risk + safe + 1.0)) > CRITIC_THRESHOLD) {
+			multi_iface = 1;
+			risk = safe = 0;
+		}
+#endif
 		key = ted_info->msg_id;
 
-		//msg_origin = g_hash_table_lookup(ht, key);
 		msg_origin = GET_HASH((*ht), key, NULL);
 		if (msg_origin == NULL) {
 			exit_err("%s:No key %d in the ht\n", __func__, key);
@@ -316,7 +334,7 @@ int main(int argc, char **argv)
 {
 	char *usage, *address;
 	int port;
-	int i, idx; 
+	int i; 
 	int epollfd, nfds;
 	int sd;
 	struct epoll_event events[MAX_EPOLL_EVENTS];
@@ -409,6 +427,7 @@ int main(int argc, char **argv)
 		exit_err("%s: Init epoll failed on sd", __func__);
 
 	for (i = 0; i < n_ext_socks; i++) {
+		printf("Registering socket for iface %s\n", ext_socks[i].iface.name);
 		if (epoll_add_socket(epollfd, &(ext_socks[i])) < 0) {
 			exit_err("%s: Can't register socket %d in epoll\n",
 				  __func__, ext_socks[i].sd);
@@ -419,7 +438,6 @@ int main(int argc, char **argv)
 	hashtb = (hashtable *)malloc(sizeof(hashtable));
 	HASH_INIT((*hashtb), HASH_SIZE_DEFAULT);
 
-	idx = 0;
 	/* Main epoll loop. Wait for events on the socket descriptor.
 	 * If an EPOLLOUT event is triggered a new message can be sent.
 	 * If an EPOLLERR event is triggered some ted error message 
@@ -431,10 +449,13 @@ int main(int argc, char **argv)
 		if (nfds == -1)
 			exit_err("epoll_wait error\n");
 		
+		printf("Epoll wakeup for %d sockets\n", nfds);
 		for (i = 0; i < nfds; i++) {
 
+			printf("events[i].events %x, EPOLLOUT %x, EPOLLERR %x\n",
+				events[i].events, EPOLLOUT, EPOLLERR);
 			/* Send a new message if the socket is ready for writing */
-			if (events[i].events & EPOLLOUT && idx < conf.n_packets) {
+			if (events[i].events & EPOLLOUT) {
 				ext_sock = get_sock_struct(ext_socks, n_ext_socks,
 							   events[i].data.fd);
 				if (!ext_sock) {
@@ -442,8 +463,10 @@ int main(int argc, char **argv)
 						  __func__);
 					continue;
 				}
-				send_new_msg(hashtb, ext_sock);
-				idx++;
+				if (ext_sock->pkt_counter < conf.n_packets) {
+					send_new_msg(hashtb, ext_sock);
+					ext_sock->pkt_counter++;
+				}
 			}
 
 			/* If there are pending TED error messages 

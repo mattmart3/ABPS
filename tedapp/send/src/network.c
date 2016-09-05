@@ -123,7 +123,7 @@ int net_create_socket(int ip_vers, char *address, int port, char *ifname, int if
 		}
 		
 		struct ifreq ifr;
-		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), ifname);
+		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifname);
 		ret = setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE,
 				 (void *)&ifr, sizeof(ifr));
 		if (ret < 0) {
