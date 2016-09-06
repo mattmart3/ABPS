@@ -135,6 +135,31 @@ int net_create_socket(int ip_vers, char *address, int port, char *ifname, int if
 	return sd;
 }
 
+ssize_t net_recv_msg(char *buffer, int length,  int sd)
+{
+	struct sockaddr *dest_addr;
+	socklen_t dest_addr_len;
+	switch (__get_ipvers(sd)) {
+	case AF_INET6:
+		dest_addr = (struct sockaddr *)&ipv6_dest_addr;
+		dest_addr_len = sizeof(ipv6_dest_addr);
+		break;
+	case AF_INET:
+		dest_addr = (struct sockaddr *)&ipv4_dest_addr;
+		dest_addr_len = sizeof(ipv4_dest_addr);
+		break;
+	default:
+		print_err("%s: Unexpected ip version\n", __func__);
+		return -1;
+	}
+
+	/* TODO: check if the address which I'm receiving from is the same 
+	 * as the destination address provided. */
+	return recvfrom(sd, buffer, length, MSG_NOSIGNAL | MSG_DONTWAIT,
+			 dest_addr, &dest_addr_len);
+
+}
+
 ssize_t net_send_msg(char *buffer, int length, int sd)
 {
 	struct sockaddr *dest_addr;
@@ -153,7 +178,7 @@ ssize_t net_send_msg(char *buffer, int length, int sd)
 		return -1;
 	}
 	return 
-		sendto(sd, buffer, strlen(buffer),
+		sendto(sd, buffer, length,
 		       MSG_NOSIGNAL | MSG_DONTWAIT, dest_addr, dest_addr_len); 
 }
 

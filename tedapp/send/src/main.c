@@ -67,16 +67,17 @@ int epoll_init()
 	return epollfd;
 }
 
-int epoll_add_socket(int epollfd, struct socket_s *ext_sock)
+int epoll_add_socket(int epollfd, struct socket_s *sock)
 {
 	struct epoll_event ev;
-	ev.events = (EPOLLOUT | EPOLLET);
+	ev.events = (EPOLLOUT | EPOLLET | EPOLLIN);
 	
 	/* Monitor socket errors only for the wifi interface */
-	if (ext_sock->iface.type == IFACE_TYPE_WLAN)
+	if (sock->iface.type == IFACE_TYPE_WLAN &&
+	    sock->type == SOCK_TYPE_EXTERNAL)
 		ev.events |= EPOLLERR;
 
-	ev.data.fd = ext_sock->sd;
+	ev.data.fd = sock->sd;
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1)
 		return -1;
 	return 0;
@@ -126,6 +127,8 @@ void send_new_msg(hashtable *ht, struct socket_s *ext_sock)
 	buffer_len = (int)strlen(buffer);
 	if (buffer_len != conf.msg_length)
 		exit_err("%s: bad buffer length\n", __func__);
+
+	/* TODO: loop in the send if there are still something to send */
 
 	if (ext_sock->iface.type == IFACE_TYPE_WLAN) {
 		sent_bytes = net_send_ted_msg(buffer, buffer_len, &identifier, ext_sock->sd);
@@ -321,6 +324,22 @@ void recv_errors(hashtable *ht, struct socket_s *ext_sock)
 
 }
 
+void recv_msg(struct socket_s *sock)
+{
+	char buffer[MAX_BUFF_SIZE];
+	ssize_t ret = 0;
+
+	while ((ret = net_recv_msg(buffer, MAX_BUFF_SIZE, sock->sd)) > 0) {
+		/* TODO: fill a buffer to forward the msg back */
+		print_dbg("received: %s\n", buffer);
+	}
+	if (ret < 0) {
+		print_err("%s: recvfrom failed with error (%s).\n",
+			  __func__, strerror(errno));
+	}
+	
+}
+
 struct socket_s *get_sock_struct(struct socket_s socks[], int n, int sd)
 {
 	int i;
@@ -401,6 +420,7 @@ int main(int argc, char **argv)
 				exit_err("%s: Can't create socket\n", __func__);
 
 			ext_socks[i].sd = sd;
+			ext_socks[i].type = SOCK_TYPE_EXTERNAL;
 			ext_socks[i].iface = conf.ifaces[i];
 			n_ext_socks++;
 		}
@@ -466,6 +486,20 @@ int main(int argc, char **argv)
 					send_new_msg(hashtb, ext_sock);
 					ext_sock->pkt_counter++;
 				}
+			}
+
+			if (events[i].events & EPOLLIN) {
+				ext_sock = get_sock_struct(ext_sock, n_ext_socks,
+							   events[i].data.fd);
+				if (!ext_sock) {
+					print_err("%s: EPOLLIN, unexpected socket id, skipping\n",
+						  __func__);
+					continue;
+				}
+
+				recv_msg(ext_sock);
+				/* TODO: forward it back */
+
 			}
 
 			/* If there are pending TED error messages 
