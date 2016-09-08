@@ -48,9 +48,12 @@
 	printf ("setsockopt() IP_PROTO IP_RECVERR not defined\n");
 #endif
 
-struct sockaddr_in ipv4_dest_addr;
+struct sockaddr_in ipv4_remote_addr;
+struct sockaddr_in6 ipv6_remote_addr;
+struct sockaddr_in ipv4_local_bind_addr;
+struct sockaddr_in6 ipv6_local_bind_addr;
 
-struct sockaddr_in6 ipv6_dest_addr;
+
 
 /* It returns -1 if the shared_instance is not instantiated.
  * Otherwise it returns the ip version of the shared_instance. */
@@ -64,32 +67,68 @@ int __get_ipvers(int sd)
 	return family_opt;
 }
 
-int net_create_socket(int ip_vers, char *address, int port, char *ifname, int ifbind)
+int net_create_socket(int ip_vers, int sock_type,
+		      char *address, int port, char *ifname, int ifbind)
 {
 	int sd, ret, optval, family;
 	socklen_t optlen;
+	struct sockaddr *local_bind_sockaddr;
+	socketlen_t local_bind_socklen;
 
-	if (ip_vers == IPPROTO_IPV6) {
-		if (ifname == NULL) {
-			exit_err("%s: Can't set ipv6 address without"
-				 "source network interface name\n", __func__);
+	switch(sock_type) {
+	case SOCK_TYPE_INTERNAL:
+		if (ip_vers == IPPROTO_IPV6) {
+			/* prepare destination sockaddr_in */
+			ipv6_local_bind_addr.sin6_family = AF_INET6;
+			inet_pton(AF_INET6, "::1", &(ipv6_local_bind_addr.sin6_addr));
+			ipv6_local_bind_addr.sin6_port = htons(port);
+
+			/* Probably this is not the proper way. */
+			ipv6_local_bind_addr.sin6_scope_id = if_nametoindex("lo");
+
+			family = AF_INET6;
+
+			local_bind_sockaddr = (struct sockaddr *)&(ipv6_local_bind_addr);
+			local_bind_socklen = sizeof(ipv6_local_bind_addr);
+		} else {
+			/* prepare destination sockaddr_in */
+			ipv4_local_bind_addr.sin_family = AF_INET;
+			inet_pton(AF_INET, "127.0.0.1", &(ipv4_local_bind_addr.sin_addr));
+			ipv4_local_bind_addr.sin_port = htons(port);
+			family = AF_INET;
+			
+			local_bind_sockaddr = (struct sockaddr *)&(ipv4_local_bind_addr);
+			local_bind_socklen = sizeof(ipv4_local_bind_addr);
 		}
-		/* prepare destination sockaddr_in */
-		ipv6_dest_addr.sin6_family = AF_INET6;
-		inet_pton(AF_INET6, address, &(ipv6_dest_addr.sin6_addr));
-		ipv6_dest_addr.sin6_port = htons(port);
+		break;
+	case SOCK_TYPE_EXTERNAL:
+		if (ip_vers == IPPROTO_IPV6) {
+			if (ifname == NULL) {
+				exit_err("%s: Can't set ipv6 address without"
+					 "source network interface name\n", __func__);
+			} else {
+				/* prepare destination sockaddr_in */
+				ipv6_remote_addr.sin6_family = AF_INET6;
+				inet_pton(AF_INET6, address, &(ipv6_remote_addr.sin6_addr));
+				ipv6_remote_addr.sin6_port = htons(port);
 
-		/* Probably this is not the proper way. */
-		ipv6_dest_addr.sin6_scope_id = if_nametoindex(ifname);
+				/* Probably this is not the proper way. */
+				ipv6_remote_addr.sin6_scope_id = if_nametoindex(ifname);
 
-		family = AF_INET6;
-	} else {
-		/* prepare destination sockaddr_in */
-		ipv4_dest_addr.sin_family = AF_INET;
-		inet_pton(AF_INET, address, &(ipv4_dest_addr.sin_addr));
-		ipv4_dest_addr.sin_port = htons(port);
+				family = AF_INET6;
+			}
+		} else {
+			/* prepare destination sockaddr_in */
+			ipv4_remote_addr.sin_family = AF_INET;
+			inet_pton(AF_INET, address, &(ipv4_remote_addr.sin_addr));
+			ipv4_remote_addr.sin_port = htons(port);
 
-		family = AF_INET;
+			family = AF_INET;
+		}
+		break;
+	default:
+		print_err("%s: Unmanaged socket creation for socket type %d\n",
+			  __func__, sock_type);
 	}
 
 	if ((sd = socket(family, SOCK_DGRAM, 0)) < 0) {
@@ -132,21 +171,24 @@ int net_create_socket(int ip_vers, char *address, int port, char *ifname, int if
 		}
 	}
 
+	if (sock_type == SOCK_TYPE_INTERNAL)
+		bind(int_sd, local_bind_sockaddr, local_bind_socklen); 
+
 	return sd;
 }
 
 ssize_t net_recv_msg(char *buffer, int length,  int sd)
 {
-	struct sockaddr *dest_addr;
-	socklen_t dest_addr_len;
+	struct sockaddr *remote_addr;
+	socklen_t remote_addr_len;
 	switch (__get_ipvers(sd)) {
 	case AF_INET6:
-		dest_addr = (struct sockaddr *)&ipv6_dest_addr;
-		dest_addr_len = sizeof(ipv6_dest_addr);
+		remote_addr = (struct sockaddr *)&ipv6_remote_addr;
+		remote_addr_len = sizeof(ipv6_remote_addr);
 		break;
 	case AF_INET:
-		dest_addr = (struct sockaddr *)&ipv4_dest_addr;
-		dest_addr_len = sizeof(ipv4_dest_addr);
+		remote_addr = (struct sockaddr *)&ipv4_remote_addr;
+		remote_addr_len = sizeof(ipv4_remote_addr);
 		break;
 	default:
 		print_err("%s: Unexpected ip version\n", __func__);
@@ -156,22 +198,22 @@ ssize_t net_recv_msg(char *buffer, int length,  int sd)
 	/* TODO: check if the address which I'm receiving from is the same 
 	 * as the destination address provided. */
 	return recvfrom(sd, buffer, length, MSG_NOSIGNAL | MSG_DONTWAIT,
-			 dest_addr, &dest_addr_len);
+			 remote_addr, &remote_addr_len);
 
 }
 
 ssize_t net_send_msg(char *buffer, int length, int sd)
 {
-	struct sockaddr *dest_addr;
-	socklen_t dest_addr_len;
+	struct sockaddr *remote_addr;
+	socklen_t remote_addr_len;
 	switch (__get_ipvers(sd)) {
 	case AF_INET6:
-		dest_addr = (struct sockaddr *)&ipv6_dest_addr;
-		dest_addr_len = sizeof(ipv6_dest_addr);
+		remote_addr = (struct sockaddr *)&ipv6_remote_addr;
+		remote_addr_len = sizeof(ipv6_remote_addr);
 		break;
 	case AF_INET:
-		dest_addr = (struct sockaddr *)&ipv4_dest_addr;
-		dest_addr_len = sizeof(ipv4_dest_addr);
+		remote_addr = (struct sockaddr *)&ipv4_remote_addr;
+		remote_addr_len = sizeof(ipv4_remote_addr);
 		break;
 	default:
 		print_err("%s: Unexpected ip version\n", __func__);
@@ -179,7 +221,7 @@ ssize_t net_send_msg(char *buffer, int length, int sd)
 	}
 	return 
 		sendto(sd, buffer, length,
-		       MSG_NOSIGNAL | MSG_DONTWAIT, dest_addr, dest_addr_len); 
+		       MSG_NOSIGNAL | MSG_DONTWAIT, remote_addr, remote_addr_len); 
 }
 
 /* Send a message asking for TED notifications. Available for the socket related
@@ -198,12 +240,12 @@ ssize_t net_send_ted_msg(char *buffer, int length, uint32_t *id_pointer, int sd)
 
 	switch (__get_ipvers(sd)) {
 	case AF_INET6:
-		msg_header.msg_name = (void *)&ipv6_dest_addr;
-		msg_header.msg_namelen = sizeof(ipv6_dest_addr);
+		msg_header.msg_name = (void *)&ipv6_remote_addr;
+		msg_header.msg_namelen = sizeof(ipv6_remote_addr);
 		break;
 	case AF_INET:
-		msg_header.msg_name = (void *)&ipv4_dest_addr;
-		msg_header.msg_namelen = sizeof(ipv4_dest_addr);
+		msg_header.msg_name = (void *)&ipv4_remote_addr;
+		msg_header.msg_namelen = sizeof(ipv4_remote_addr);
 		break;
 	default:
 		print_err("%s: Unexpected ip version\n", __func__);

@@ -40,7 +40,7 @@
 #include "hashtable.h"
 
 
-#define USAGE "[OPTIONS] ADDRESS PORT\n\n\
+#define USAGE "[OPTIONS] LOCAL_BIND_PORT REMOTE_ADDRESS REMOTE_PORT\n\n\
 OPTIONS:\n\
     -h, --help                Print this help.\n\
     -6, --ipv6                Use IPv6 (IPv4 default).\n\
@@ -53,6 +53,7 @@ OPTIONS:\n\
                               it will be considered as a wlan interface.\n\
     -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
     -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n\
+    -t, --test                Perform a test run\n\
     -d, --debug               Enable debug messages.\n"
 
 
@@ -70,10 +71,10 @@ int epoll_init()
 int epoll_add_socket(int epollfd, struct socket_s *sock)
 {
 	struct epoll_event ev;
-	ev.events = (EPOLLOUT | EPOLLET | EPOLLIN);
+	ev.events = EPOLLIN;
 	
 	/* Monitor socket errors only for the wifi interface */
-	if (sock->iface.type == IFACE_TYPE_WLAN &&
+	if (if sock && sock->iface.type == IFACE_TYPE_WLAN &&
 	    sock->type == SOCK_TYPE_EXTERNAL)
 		ev.events |= EPOLLERR;
 
@@ -114,63 +115,7 @@ char * new_msg(void)
 	return content;
 }
 
-/* Send a new message requesting an identifier for TED. Check net_sendmsg(). */
-void send_new_msg(hashtable *ht, struct socket_s *ext_sock)
-{
-	uint32_t identifier;
-	struct msg_info_s *info;
-	char *buffer;
-	int buffer_len, sent_bytes;
 
-	/* Compose a new message and send it */
-	buffer = new_msg();
-	buffer_len = (int)strlen(buffer);
-	if (buffer_len != conf.msg_length)
-		exit_err("%s: bad buffer length\n", __func__);
-
-	/* TODO: loop in the send if there are still something to send */
-
-	if (ext_sock->iface.type == IFACE_TYPE_WLAN) {
-		sent_bytes = net_send_ted_msg(buffer, buffer_len, &identifier, ext_sock->sd);
-		if (sent_bytes < 0) {
-			print_err("%s: Sendmsg error (%s).\n",
-				  __func__, strerror(errno));
-		} else if (sent_bytes != buffer_len) {
-			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
-				  __func__, buffer_len, sent_bytes); 
-		} else {
-
-			printf("----------------------------------WIFI---------------"
-			       "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %d\n", 
-		       ext_sock->iface.name, identifier, sent_bytes);
-
-			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
-			if (info == NULL)
-				exit_err("%s: malloc failed", __func__);
-
-			info->size = buffer_len;
-			info->id = identifier;
-			info->n_frags = 0;
-			info->last_frag_received = 0;
-
-			HASH((*ht), identifier, info);
-		}
-	} else {
-		sent_bytes = net_send_msg(buffer, buffer_len, ext_sock->sd);
-		if (sent_bytes < 0) {
-			print_err("%s: Sendmsg error (%s).\n",
-				  __func__, strerror(errno));
-		} else if (sent_bytes != buffer_len) {
-			print_err("%s: Lost bytes? msg size: %d, sent bytes %d\n",
-				  __func__, buffer_len, sent_bytes); 
-		} else {
-			printf("-----------------------------------------------------"
-			       "----------------\n\t\t\t\t\t%s: sent pkt, size: %d\n", 
-			       ext_sock->iface.name, sent_bytes);
-		}
-	}
-	free(buffer);
-}
 
 static int compare_frags(const void *frag1, const void *frag2)
 {
@@ -222,9 +167,7 @@ int try_recompose(struct msg_info_s *msg_origin)
 }
 
 
-void hash_table_remove(struct msg_info_s *msg_origin,
-                       hashtable *ht, int key)
-                       /*GHashTable *hash_table, gconstpointer key)*/
+void hash_table_remove(struct msg_info_s *msg_origin, hashtable *ht, int key)
 {
 	int i;
 
@@ -232,7 +175,6 @@ void hash_table_remove(struct msg_info_s *msg_origin,
 		free(msg_origin->frags[i]);
 	
 
-	//g_hash_table_remove(hash_table, key);
 	HASH((*ht), key, NULL);
 
 }
@@ -320,24 +262,114 @@ void recv_errors(hashtable *ht, struct socket_s *ext_sock)
 		}
 		free(error_message);
 	}	
-
-
 }
 
-void recv_msg(struct socket_s *sock)
+/* Forward a message to the world through the "external" socket. */
+void send_to_ext(hashtable *ht, struct socket_s *ext_sock)
 {
-	char buffer[MAX_BUFF_SIZE];
-	ssize_t ret = 0;
+	uint32_t ted_id;
+	struct msg_info_s *info;
+	char *buf;
+	size_t len;
+	ssize_t sent;
+	int sd, cnt;
 
-	while ((ret = net_recv_msg(buffer, MAX_BUFF_SIZE, sock->sd)) > 0) {
-		/* TODO: fill a buffer to forward the msg back */
-		print_dbg("received: %s\n", buffer);
-	}
-	if (ret < 0) {
-		print_err("%s: recvfrom failed with error (%s).\n",
-			  __func__, strerror(errno));
+	sd = ext_sock->sd;
+	cnt = ext_sock->queue_cnt_int2ext;
+	if (cnt > MAX_QUEUE_SIZE)
+		exit_err("%s: too many msgs in the queue\n", __func__);
+
+	int i = 0;
+	/* Continue to send until there are no more messages in the queue. */
+	do {
+		
+		if (conf.test) {
+			cnt = 1;
+			buf = new_msg();
+			if ((len = strlen(buf)) != conf.msg_length)
+				exit_err("%s: bad buffer length\n", __func__);
+		} else {
+			len = ext_sock->queue_int2ext[i].length;
+			buf = ext_sock->queue_int2ext[i].buffer;
+		}
+
+		if (ext_sock->iface.type == IFACE_TYPE_WLAN) {
+			sent = net_send_ted_msg(buf, len, &ted_id, sd);
+			if (sent <= 0)
+				break;
+
+			printf("----------------------------------WIFI---------------"
+			       "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %zd\n", 
+			       ext_sock->iface.name, ted_id, sent);
+
+			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
+			if (info == NULL)
+				exit_err("%s: malloc failed", __func__);
+
+			info->size = len;
+			info->id = ted_id;
+			info->n_frags = 0;
+			info->last_frag_received = 0;
+
+			HASH((*ht), ted_id, info);
+		} else {
+			sent = net_send_msg(buf, len, sd);
+			if (sent <= 0) 
+				break;
+			printf("-----------------------------------------------------"
+			       "----------------\n\t\t\t\t\t%s: sent pkt, size: %zd\n", 
+			       ext_sock->iface.name, sent);
+		}
+		ext_sock->queue_cnt_int2ext = --cnt;
+		i++;
+
+	} while (cnt > 0);
+
+	if (sent < 0 && errno != EAGAIN) {
+		print_err("%s: Sendmsg error (%s).\n", __func__, strerror(errno));
 	}
 	
+	/* If there are still messages to be sent, move them at the top
+	 * of the queue. */
+	if (cnt > 0) {
+		int j;
+		for (j = i; i < j + cnt; i++)
+			ext_sock->queue_int2ext[i - j] = ext_sock->queue_int2ext[i];
+	}
+
+	if (conf.test)
+		free(buf);
+}
+
+void sent_to_int()
+{
+}
+
+void recv_from_ext(struct socket_s *sock)
+{
+	char buffer[MAX_BUFF_SIZE];
+	char *buf;
+	int cnt;
+	ssize_t ret = 0;
+
+	/* Push the incoming messages in the backward queue (ext to int).
+	 * Contintue reading until there are no more messages to read or 
+	 * we exeed the buffer queue size. */
+	do {
+		cnt = sock->queue_cnt_ext2int;
+		buf = sock->queue_ext2int[cnt];
+		ret = net_recv_msg(buf, MAX_BUFF_SIZE, sock->sd);
+	} while (ret > 0 && (++(sock->queue_cnt_ext2int)) < (MAX_QUEUE_SIZE - 1));
+
+	if (ret < 0)
+		print_err("%s: recvfrom failed with error (%s).\n",
+			  __func__, strerror(errno));
+
+	/* TODO: what about pending messages */
+}
+
+void recv_from_int()
+{
 }
 
 struct socket_s *get_sock_struct(struct socket_s socks[], int n, int sd)
@@ -352,11 +384,12 @@ struct socket_s *get_sock_struct(struct socket_s socks[], int n, int sd)
 
 int main(int argc, char **argv)
 {
-	char *usage, *address;
-	int port;
+	char *usage, *int_address, ext_address;
+	int int_port, ext_port;
 	int i; 
 	int epollfd, nfds;
 	int sd;
+	int int_sd; /* The internal socket file descriptor */
 	struct epoll_event events[MAX_EPOLL_EVENTS];
 	struct socket_s ext_socks[MAX_IFACES];
 	int n_ext_socks;
@@ -364,8 +397,8 @@ int main(int argc, char **argv)
 
 	hashtable *hashtb;
 
-	address = NULL;
-	port = -1;
+	ext_address = int_address = NULL;
+	ext_port = int_port = -1;
 	n_ext_socks = 0;
 	wlan_sock_id = -1;
 	memset(&ext_socks, 0, sizeof(ext_socks) * MAX_IFACES);
@@ -376,7 +409,7 @@ int main(int argc, char **argv)
 	utils_default_conf();
 
 	/* Arguments validation */
-	if (utils_get_opt(argc, argv) == -1 || argc - optind < 2) {
+	if (utils_get_opt(argc, argv) == -1 || argc - optind < 3) {
 
 		exit_err("Some required argument is missing.\n\n%s", usage);
 
@@ -390,8 +423,9 @@ int main(int argc, char **argv)
 		exit_err("The interface(s) which the socket(s) should bind to, "
 			 "MUST be specified (see '-i' option).\n\n%s", usage);
 	} else {
-		address = argv[optind++];
-		port = atoi(argv[optind++]);
+		int_port = atoi(argv[optind++]);
+		ext_address = argv[optind++];
+		ext_port = atoi(argv[optind++]);
 	}
 
 	free(usage);
@@ -414,7 +448,8 @@ int main(int argc, char **argv)
 				}
 			}
 				
-			sd = net_create_socket(conf.ip_vers, address, port,
+			sd = net_create_socket(conf.ip_vers, SOCK_TYPE_EXTERNAL,
+					       ext_address, ext_port,
 					       conf.ifaces[i].name, conf.bind_iface);
 			if (sd < 0)
 				exit_err("%s: Can't create socket\n", __func__);
@@ -428,7 +463,7 @@ int main(int argc, char **argv)
 			exit_err("%s: Sockets count and ifaces count mismatch.\n",
 				 __func__);
 	} else {
-		sd = net_create_socket(conf.ip_vers, address, port, NULL, 0);
+		sd = net_create_socket(conf.ip_vers, ext_address, ext_port, NULL, 0);
 		if (sd < 0)
 			exit_err("%s: Can't create socket\n", __func__);
 		ext_socks[0].sd = sd;
@@ -442,6 +477,10 @@ int main(int argc, char **argv)
 		ext_socks[0].iface.type = IFACE_TYPE_WLAN;
 	}
 
+	/* Create the internal socket and bind it to localhost in order to
+	 * let it receive the incoming messages from the local application. */
+	int_sd = net_create_socket(conf.ip_vers, SOCK_TYPE_INTERNAL, NULL, int_port, NULL, 0);
+
 	/* Init epoll for handling events of the shared socket descriptor */
 	epollfd = epoll_init();
 	if (epollfd == -1)
@@ -453,9 +492,10 @@ int main(int argc, char **argv)
 			exit_err("%s: Can't register socket %d in epoll\n",
 				  __func__, ext_socks[i].sd);
 		}
-
 	}
 	
+	epoll_add_socket(int_fd, NULL); 
+
 	hashtb = (hashtable *)malloc(sizeof(hashtable));
 	HASH_INIT((*hashtb), HASH_SIZE_DEFAULT);
 
@@ -464,6 +504,7 @@ int main(int argc, char **argv)
 	 * If an EPOLLERR event is triggered some ted error message 
 	 * may be present in the errqueue. */
 	struct socket_s *ext_sock;
+	struct epoll_event ev;
 	for (;;) {
 
 		nfds = epoll_wait(epollfd, events, MAX_EPOLL_EVENTS, -1);
@@ -475,31 +516,70 @@ int main(int argc, char **argv)
 
 			/* Send a new message if the socket is ready for writing */
 			if (events[i].events & EPOLLOUT) {
-				ext_sock = get_sock_struct(ext_socks, n_ext_socks,
-							   events[i].data.fd);
-				if (!ext_sock) {
-					print_err("%s: EPOLLOUT, unexpected socket id, skipping\n",
-						  __func__);
-					continue;
-				}
-				if (ext_sock->pkt_counter < conf.n_packets) {
-					send_new_msg(hashtb, ext_sock);
-					ext_sock->pkt_counter++;
+
+				if (events[i].data.fd == int_sd) {
+					/* Send the messages in the queue
+					 * back through the internal socket. */
+					sent_to_int();
+					
+					/* Stop this socket to be awakened until
+					 * we read something from the external sockets. */
+					ev.events = EPOLLIN;
+					ev.data.fd = events[i].data.fd;
+					epoll_ctl(epollfd, EPOLL_CTL_MOD, ev.data.fd, &ev);
+				} else {
+					ext_sock = get_sock_struct(ext_socks,
+								   n_ext_socks,
+								   events[i].data.fd);
+
+					if (!ext_sock) {
+						print_err("%s: EPOLLOUT, unexpected socket id, skipping\n",
+							   __func__);
+						continue;
+					}
+					send_to_ext(hashtb, ext_sock);
+
+					/* Stop this socket to be awakened until
+					 * we read something from the internal socket. */
+					ev.events = EPOLLIN;
+					ev.data.fd = events[i].data.fd;
+					epoll_ctl(epollfd, EPOLL_CTL_MOD, ev.data.fd, &ev);
 				}
 			}
 
 			if (events[i].events & EPOLLIN) {
-				ext_sock = get_sock_struct(ext_sock, n_ext_socks,
-							   events[i].data.fd);
-				if (!ext_sock) {
-					print_err("%s: EPOLLIN, unexpected socket id, skipping\n",
-						  __func__);
-					continue;
+				if (events[i].data.fd == int_sd) {
+					/* Read and enqueue the messages from 
+					 * the internal socket*/
+					recv_from_int(int_sd);
+
+					/* Wake all the external sockets when they are
+					 * able to send out messages. */
+					int i;
+					for (i = 0; i < n_ext_socks; i++) {
+						ev.events = EPOLLIN | EPOLLOUT;
+						ev.data.fd = ext_sock[i].sd;
+						epoll_ctl(epollfd, EPOLL_CTL_MOD, ev.data.fd, &ev);
+					}
+
+				} else {
+					ext_sock = get_sock_struct(ext_sock, n_ext_socks,
+								   events[i].data.fd);
+					if (!ext_sock) {
+						print_err("%s: EPOLLIN, unexpected socket id, skipping\n",
+							  __func__);
+						continue;
+					}
+
+					/* Read and enqueue the messages */
+					recv_from_ext(ext_sock);
+
+					/* Wake the internal socket when it's able to send out
+					 * messages. */
+					ev.events = EPOLLIN | EPOLLOUT;
+					ev.data.fd = int_sd;
+					epoll_ctl(epollfd, EPOLL_CTL_MOD, ev.data.fd, &ev);
 				}
-
-				recv_msg(ext_sock);
-				/* TODO: forward it back */
-
 			}
 
 			/* If there are pending TED error messages 
