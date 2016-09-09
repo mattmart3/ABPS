@@ -53,13 +53,14 @@ struct msg_s {
 	char buffer[MAX_BUFF_SIZE];
 };
 
-struct socket_s {
+/* Sockets that communicate with the external world.
+ * Each of them has a reference to two queues,
+ * one for the datagrams to forward out and one for the datagrams
+ * to forward in. */
+struct extsock_s {
 	int sd;
-	int type;
-	int queue_cnt_int2ext;
-	int queue_cnt_ext2int;
-	struct msg_s queue_int2ext[MAX_QUEUE_SIZE];
-	struct msg_s queue_ext2int[MAX_QUEUE_SIZE];
+	int queue_cnt[2];
+	struct msg_s queue[2][MAX_QUEUE_SIZE];
 	int pkt_counter; /* Used in test mode */
 	struct iface_s iface;
 };

@@ -39,6 +39,9 @@
 #define SOCK_TYPE_EXTERNAL 2
 #define SOCK_TYPE_INTERNAL 3
 
+#define DIR_INT2EXT 0
+#define DIR_EXT2INT 1
+
 #define TED_CMSG_TYPE 111
 #define MAX_EPOLL_EVENTS 10
 

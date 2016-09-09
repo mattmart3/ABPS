@@ -53,7 +53,7 @@ struct sockaddr_in6 ipv6_remote_addr;
 struct sockaddr_in ipv4_local_bind_addr;
 struct sockaddr_in6 ipv6_local_bind_addr;
 
-
+int int_sd; /* Internal socket bound to localhost. */
 
 /* It returns -1 if the shared_instance is not instantiated.
  * Otherwise it returns the ip version of the shared_instance. */
@@ -73,7 +73,7 @@ int net_create_socket(int ip_vers, int sock_type,
 	int sd, ret, optval, family;
 	socklen_t optlen;
 	struct sockaddr *local_bind_sockaddr;
-	socketlen_t local_bind_socklen;
+	socklen_t local_bind_socklen;
 
 	switch(sock_type) {
 	case SOCK_TYPE_INTERNAL:
@@ -171,57 +171,72 @@ int net_create_socket(int ip_vers, int sock_type,
 		}
 	}
 
-	if (sock_type == SOCK_TYPE_INTERNAL)
-		bind(int_sd, local_bind_sockaddr, local_bind_socklen); 
+	if (sock_type == SOCK_TYPE_INTERNAL) {
+		bind(sd, local_bind_sockaddr, local_bind_socklen); 
+		int_sd = sd;
+	}
 
 	return sd;
 }
 
-ssize_t net_recv_msg(char *buffer, int length,  int sd)
+int __get_sockaddr(int sd, struct sockaddr **addr, socklen_t *addr_len)
 {
-	struct sockaddr *remote_addr;
-	socklen_t remote_addr_len;
 	switch (__get_ipvers(sd)) {
 	case AF_INET6:
-		remote_addr = (struct sockaddr *)&ipv6_remote_addr;
-		remote_addr_len = sizeof(ipv6_remote_addr);
+		if (sd == int_sd) {
+			*addr = (struct sockaddr *)&ipv6_local_bind_addr;
+			*addr_len = sizeof(ipv6_local_bind_addr);
+		} else { 
+			*addr = (struct sockaddr *)&ipv6_remote_addr;
+			*addr_len = sizeof(ipv6_remote_addr);
+		}
 		break;
 	case AF_INET:
-		remote_addr = (struct sockaddr *)&ipv4_remote_addr;
-		remote_addr_len = sizeof(ipv4_remote_addr);
+		if (sd == int_sd) {
+			*addr = (struct sockaddr *)&ipv4_local_bind_addr;
+			*addr_len = sizeof(ipv4_local_bind_addr);
+		} else {
+			*addr = (struct sockaddr *)&ipv4_remote_addr;
+			*addr_len = sizeof(ipv4_remote_addr);
+		}
 		break;
 	default:
 		print_err("%s: Unexpected ip version\n", __func__);
+		return -1;
+	}
+	return 0;
+}
+
+ssize_t net_recv_msg(char *buffer, int length, int sd)
+{
+	struct sockaddr *addr;
+	socklen_t addr_len;
+
+	if (__get_sockaddr(sd, &addr, &addr_len) < 0) {
+		print_err("%s: Can't get sockaddr.\n", __func__);
 		return -1;
 	}
 
 	/* TODO: check if the address which I'm receiving from is the same 
 	 * as the destination address provided. */
 	return recvfrom(sd, buffer, length, MSG_NOSIGNAL | MSG_DONTWAIT,
-			 remote_addr, &remote_addr_len);
+			addr, &addr_len);
 
 }
 
 ssize_t net_send_msg(char *buffer, int length, int sd)
 {
-	struct sockaddr *remote_addr;
-	socklen_t remote_addr_len;
-	switch (__get_ipvers(sd)) {
-	case AF_INET6:
-		remote_addr = (struct sockaddr *)&ipv6_remote_addr;
-		remote_addr_len = sizeof(ipv6_remote_addr);
-		break;
-	case AF_INET:
-		remote_addr = (struct sockaddr *)&ipv4_remote_addr;
-		remote_addr_len = sizeof(ipv4_remote_addr);
-		break;
-	default:
-		print_err("%s: Unexpected ip version\n", __func__);
+	struct sockaddr *addr;
+	socklen_t addr_len;
+
+	if (__get_sockaddr(sd, &addr, &addr_len) < 0) {
+		print_err("%s: Can't get sockaddr.\n", __func__);
 		return -1;
 	}
+
 	return 
 		sendto(sd, buffer, length,
-		       MSG_NOSIGNAL | MSG_DONTWAIT, remote_addr, remote_addr_len); 
+		       MSG_NOSIGNAL | MSG_DONTWAIT, addr, addr_len); 
 }
 
 /* Send a message asking for TED notifications. Available for the socket related

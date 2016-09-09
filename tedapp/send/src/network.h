@@ -26,7 +26,8 @@
 
 #include "structs.h"
 
-int net_create_socket(int ip_vers, char *address, int port, char *ifname, int ifbind);
+int net_create_socket(int ip_vers, int sock_type, char *address, 
+		      int port, char *ifname, int ifbind);
 ssize_t net_recv_msg(char *buffer, int length, int sd);
 ssize_t net_send_msg(char *buffer, int length, int sd);
 ssize_t net_send_ted_msg(char *buffer, int length, uint32_t *id_pointer, int sd);
