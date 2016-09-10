@@ -21,7 +21,6 @@
 /* USA.                                                                      */
 /*****************************************************************************/
 #define _GNU_SOURCE
-
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -178,7 +177,7 @@ struct extsock_s *get_esock(struct extsock_s esocks[], int n, int sd)
 int queues_have_space(struct extsock_s esocks[], int n, int direction)
 {
 	int i;
-	for (i = 0; i < n; i++)
+	for (i = 0; i < n; i++) 
 		if (esocks[i].queue_cnt[direction] >= MAX_QUEUE_SIZE)
 			return 0;
 
@@ -455,7 +454,8 @@ void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks)
 		}
 	} 
 	if (!space)
-		print_dbg("%s: Not all external sockets have space. Pause reading.\n");
+		print_dbg("%s: Not all external sockets have space.\n"
+			  "Pause reading.\n", __func__);
 
 	if (ret < 0 && errno != EAGAIN) {
 		print_err("%s: recvfrom failed with error (%s).\n",
