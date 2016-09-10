@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /* Trebucket list macro hash table implementation.                           */
 /*                                                                           */
-/* Copyright (C) 2015                                                        */
+/* Copyright (C) 2015, 2016                                                  */
 /* Davide Berardi                                                            */
 /*                                                                           */
 /* This program is free software; you can redistribute it and/or             */
@@ -30,7 +30,6 @@
 #define HASH_SIZE_DEFAULT 4096
 struct hasher {
 	int key;
-	/* void **values; */
 	void *values;
 };
 
@@ -47,7 +46,7 @@ struct {
 
 #define HASH_INIT(handle, hsize) ({\
 	handle.size=hsize;\
-	handle.inner = malloc(sizeof(struct bucket) * hsize);\
+	handle.inner = (struct bucket *)malloc(sizeof(struct bucket) * hsize);\
 	if (handle.inner)\
 		memset(handle.inner, 0, sizeof(struct bucket) * hsize);\
 })
@@ -70,7 +69,7 @@ struct {
 				handle.inner[__oval].alloc_size *= 4;\
 			else\
 				handle.inner[__oval].alloc_size = 1;\
-			handle.inner[__oval].hash = realloc(handle.inner[__oval].hash, handle.inner[__oval].alloc_size * (sizeof (struct hasher)));\
+			handle.inner[__oval].hash = (struct hasher *)realloc(handle.inner[__oval].hash, handle.inner[__oval].alloc_size * (sizeof (struct hasher)));\
 		}\
 		__newval = handle.inner[__oval].size-1;\
 		handle.inner[__oval].hash[__newval].values = malloc(sizeof(void*));\

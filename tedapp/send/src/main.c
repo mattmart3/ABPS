@@ -252,7 +252,7 @@ void recv_errors(hashtable *ht, struct extsock_s *esock)
 #endif
 		key = ted_info->msg_id;
 
-		msg_origin = GET_HASH((*ht), key, NULL);
+		msg_origin = (struct msg_info_s *)GET_HASH((*ht), key, NULL);
 		if (msg_origin == NULL) {
 			exit_err("%s:No key %d in the ht\n", __func__, key);
 
@@ -308,7 +308,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock)
 		if (conf.test) {
 			*cnt = 1;
 			buf = new_msg();
-			if ((len = strlen(buf)) != conf.msg_length)
+			if ((len = strlen(buf)) != (size_t)conf.msg_length)
 				exit_err("%s: bad buffer length\n", __func__);
 		} else {
 			len = queue[i].length;
@@ -333,7 +333,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock)
 			info->n_frags = 0;
 			info->last_frag_received = 0;
 
-			HASH((*ht), ted_id, info);
+			HASH((*ht), (int)ted_id, info);
 		} else {
 			sent = net_send_msg(buf, len, sd);
 			if (sent <= 0) 
