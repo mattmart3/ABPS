@@ -1,12 +1,12 @@
 # Object files
-tedapp/send/obj
+tedproxy/obj
 *.o
 *.ko
 *.obj
 *.elf
 
 # Libraries
-tedapp/send/libs
+tedproxy/libs
 *.lib
 *.a
 
@@ -17,7 +17,7 @@ tedapp/send/libs
 *.dylib
 
 # Executables
-tedapp/send/bin
+tedproxy/bin
 *.exe
 *.out
 *.app

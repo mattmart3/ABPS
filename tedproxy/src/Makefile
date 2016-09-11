@@ -5,7 +5,7 @@ CC=gcc
 
 all:
 	mkdir -p ../bin/linux
-	$(CC) $(CFLAGS) ../bin/linux/tedapp utils.c network.c tederror.c main.c
+	$(CC) $(CFLAGS) ../bin/linux/tedproxy utils.c network.c tederror.c main.c
 clean: 
 	@rm -rfv *.o *.so *.so*
 
