@@ -41,19 +41,20 @@
 
 #define USAGE "[OPTIONS] LOCAL_BIND_PORT REMOTE_ADDRESS REMOTE_PORT\n\n\
 OPTIONS:\n\
-    -h, --help                Print this help.\n\
-    -6, --ipv6                Use IPv6 (IPv4 default).\n\
-                                  Interface argument MUST be specified (-i).\n\
-    -b, --bind_iface          Bind the socket to the specified network interface.\n\
-                                  Interface argument MUST be specified (-i). \n\
-    -i, --iface=[w:]NIC_NAME  Specify the network interface to be used.\n\
-                              More interfaces can be specified repeating this option.\n\
-                              Adding 'w:' before the interface name,\n\
-                              it will be considered as a wlan interface.\n\
-    -n, --npkts=N_PKTS        Specify how many packets must be sent.\n\
-    -s, --size=PKT_SIZE       Specify how big (bytes) a packet must be.\n\
-    -t, --test                Perform a test run\n\
-    -d, --debug               Enable debug messages.\n"
+    -h, --help           Print this help.\n\
+    -6, --ipv6           Use IPv6 (IPv4 default).\n\
+                         Interface argument MUST be specified (-i).\n\
+    -b, --bind_iface     Bind the socket to the specified network interface.\n\
+                         Interface argument MUST be specified (-i). \n\
+    -i, --iface=[t:]dev  Specify the network interface to be used.\n\
+                         More interfaces can be specified repeating this option.\n\
+                         Adding 't:' before the interface name, TED notifications\n\
+                         will be enabled for this device which MUST be a mac80211\n\
+                         device and this app MUST run on a TED patched kernel.\n\
+    -t, --test           Run in test mode.\n\
+    -n, --npkts=N_PKTS   Specify how many packets must be sent (test mode only).\n\
+    -s, --size=PKT_SIZE  Specify how big (bytes) a packet must be (test mode only).\n\
+    -d, --debug          Enable debug messages.\n"
 
 
 int epoll_init()
@@ -73,7 +74,7 @@ int epoll_add_socket(int epollfd, int sd, int iface_type)
 	ev.events = EPOLLIN;
 	
 	/* Monitor socket errors only for the wifi interface */
-	if (iface_type == IFACE_TYPE_WLAN)
+	if (iface_type == IFACE_TYPE_TED)
 		ev.events |= EPOLLERR;
 
 	ev.data.fd = sd;
@@ -197,7 +198,7 @@ void hash_table_remove(struct msg_info_s *msg_origin, hashtable *ht, int key)
 
 }
 /* Receive all the ted notification error that are pending in the errqueue */
-void recv_errors(hashtable *ht, struct extsock_s *esock)
+void recv_errors(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 {
 	struct err_msg_s *error_message;
 
@@ -207,6 +208,7 @@ void recv_errors(hashtable *ht, struct extsock_s *esock)
 		struct ted_info_s *ted_info;
 		struct msg_info_s *msg_origin;
 		int key, there_is_ted;
+		float risk_ratio;
 
 		ted_info = (struct ted_info_s *)malloc(sizeof(struct ted_info_s));
 		if (ted_info == NULL) 
@@ -219,36 +221,46 @@ void recv_errors(hashtable *ht, struct extsock_s *esock)
 			continue;
 		}
 
-		printf("-------------------------------------------------"
+		print_dbg("-------------------------------------------------"
 		       "--------------------\nTED notified ID: %d \n",
 		       ted_info->msg_id);
 
-		printf("msg_id: %d, retry_count: %d, acked: %d\n"
+		print_dbg("msg_id: %d, retry_count: %d, acked: %d\n"
 		       "more_frag: %d, frag_len: %d, frag_off: %d\n",
 		       ted_info->msg_id, ted_info->retry_count, ted_info->status,
 		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
 		
-#if 0 /* TODO: Let's turn this in a proxy first */
 		/* We have two counters: drop (which takes also those with high retransmission) 
 		 * and sent packets which are considered in a transmission window.
 		 * If the risk/safe ratio is above a certain threshold we can 
 		 * activate the second network interface */
 		if (!ted_info->status || ted_info->retry_count > RETRY_COUNT_THRESHOLD) {
-			risk++;
+			esock->pkt_risk++;
 		} else {
-			safe++;
+			esock->pkt_ok++;
 		}
 
-		/* Restart the counter if we are out the window */
-		if (drop + sent > CRITIC_CHECK_WINDOW) {
-			risk = safe = multi_iface = 0;
+		risk_ratio = ((float)esock->pkt_risk)/((float)CRITIC_CHECK_WINDOW); 
+		
+		/* When we reach the end of the window, disable the other device(s) if 
+		 * the ted dev is stable (0 risk) and restart the counters. */
+		if (esock->pkt_risk + esock->pkt_ok > CRITIC_CHECK_WINDOW) {
+			if (risk_ratio == 0) {
+				printf("Ted wifi device should be stable\n"
+				       "Deactivating support device\n");
+				*ted_dev_only = 1;
+			}
+			esock->pkt_risk = esock->pkt_ok = 0;
 		}
 
-		if (((float)risk)/((float)(risk + safe + 1.0)) > CRITIC_THRESHOLD) {
-			multi_iface = 1;
-			risk = safe = 0;
+		/* Enable support from the other device(s) */
+		if (risk_ratio > CRITIC_THRESHOLD) {
+			printf("Critical risk ratio %f, enabling support device\n",
+			      risk_ratio);
+			*ted_dev_only = 0;
+			esock->pkt_risk = esock->pkt_ok = 0;
 		}
-#endif
+
 		key = ted_info->msg_id;
 
 		msg_origin = (struct msg_info_s *)GET_HASH((*ht), key, NULL);
@@ -283,7 +295,7 @@ void recv_errors(hashtable *ht, struct extsock_s *esock)
 }
 
 /* Forward a message to the world through the "external" socket. */
-void send_to_ext(hashtable *ht, struct extsock_s *esock)
+void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 {
 	uint32_t ted_id;
 	struct msg_info_s *info;
@@ -314,14 +326,15 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock)
 			buf = queue[i].buffer;
 		}
 
-		if (esock->iface.type == IFACE_TYPE_WLAN) {
+		if (esock->iface.type == IFACE_TYPE_TED) {
 			sent = net_send_ted_msg(buf, len, &ted_id, sd);
 			if (sent <= 0)
 				break;
 
-			print_dbg("----------------------------------WIFI---------------"
-			          "----------------\n\t\t\t\t\t%s: sent pkt ID: %d\n\t\t\t\t\tsize: %zd\n", 
-			       esock->iface.name, ted_id, sent);
+			print_dbg("--------------------------------------------"
+				  "-------------------------\n\t\t\t\t\t%s: "
+				  "ted id: %d\n\t\t\t\t\tsize: %zd\n", 
+				  esock->iface.name, ted_id, sent);
 
 			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
 			if (info == NULL)
@@ -333,13 +346,14 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock)
 			info->last_frag_received = 0;
 
 			HASH((*ht), (int)ted_id, info);
-		} else {
+		} else if (!ted_dev_only) {
 			sent = net_send_msg(buf, len, sd);
 			if (sent <= 0) 
 				break;
-			print_dbg("-----------------------------------------------------"
-			          "----------------\n\t\t\t\t\t%s: sent pkt, size: %zd\n", 
-			       esock->iface.name, sent);
+			print_dbg("--------------------------------------------"
+				  "-------------------------\n\t\t\t\t\t%s: ",
+				  "sent pkt, size: %zd\n", 
+				  esock->iface.name, sent);
 		}
 		/* Decrease the queue counter and increase the counter of 
 		 * sent message */
@@ -348,7 +362,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock)
 
 	}
 
-	if (sent < 0 && errno != EAGAIN) {
+	if (sent < 0 && errno != EAGAIN && errno != ENETDOWN && errno != ENETUNREACH) {
 		print_err("%s: Sendmsg error (%s).\n", __func__, strerror(errno));
 	}
 	
@@ -476,7 +490,7 @@ void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks)
  *   */
 void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 			 struct extsock_s *esocks, int n_esocks,
-			 int int_sd, hashtable *hashtb)
+			 int int_sd, hashtable *hashtb, int *ted_dev_only)
 {
 	/* Send a new message if the socket is ready for writing */
 	struct extsock_s *esock;
@@ -494,7 +508,7 @@ void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 					  "skipping\n", __func__);
 				return;
 			}
-			send_to_ext(hashtb, esock);
+			send_to_ext(hashtb, esock, *ted_dev_only);
 		}
 		/* Stop this socket to be awakened until
 		 * we read something from the external sockets. */
@@ -545,7 +559,7 @@ void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 	 * interface here. */
 	if (events[ev_idx].events & EPOLLERR) {
 		esock = get_esock(esocks, n_esocks, events[ev_idx].data.fd);
-		recv_errors(hashtb, esock);
+		recv_errors(hashtb, esock, ted_dev_only);
 	}
 }
 
@@ -562,6 +576,7 @@ int main(int argc, char **argv)
 	struct extsock_s esocks[MAX_IFACES];
 	int n_esocks;
 	int wlan_sock_id;
+	int ted_dev_only;
 
 	hashtable *hashtb;
 
@@ -569,6 +584,7 @@ int main(int argc, char **argv)
 	ext_port = int_port = -1;
 	n_esocks = 0;
 	wlan_sock_id = -1;
+	ted_dev_only = 0;
 	memset(esocks, 0, sizeof(struct extsock_s) * MAX_IFACES);
 
 	asprintf(&usage, "Usage: %s %s", basename(argv[0]), USAGE);
@@ -584,7 +600,7 @@ int main(int argc, char **argv)
 	} else if (conf.ip_vers == IPPROTO_IPV6 && conf.nifaces == 0) { 
 
 		exit_err("Interface(s) MUST be specified while using IPv6 "
-		         "(see '-i' option).\n\n%s", usage);
+			 "(see '-i' option).\n\n%s", usage);
 
 	} else if (conf.bind_iface && conf.nifaces == 0) {
 
@@ -607,13 +623,12 @@ int main(int argc, char **argv)
 				conf.ifaces[i].name_length, conf.ifaces[i].type);
 
 			/* Check which one is the wifi interface */
-			if (conf.ifaces[i].type == IFACE_TYPE_WLAN) {
-				if (wlan_sock_id >= 0) {
-					exit_err("%s: Only one wlan iface is allowed.\n",
-					         __func__);
-				} else {
-					wlan_sock_id = i;
-				}
+			if (conf.ifaces[i].type == IFACE_TYPE_TED) {
+				if (wlan_sock_id >= 0) 
+					exit_err("%s: Only one wlan ted iface is allowed.\n",
+						 __func__);
+				wlan_sock_id = i;
+				ted_dev_only = 0;
 			}
 				
 			sd = net_create_socket(conf.ip_vers, SOCK_TYPE_EXTERNAL,
@@ -642,7 +657,7 @@ int main(int argc, char **argv)
 		printf("I hope you are routing out through a wifi device, "
 		       "or this doesn't make any sense.\n\n");
 
-		esocks[0].iface.type = IFACE_TYPE_WLAN;
+		esocks[0].iface.type = IFACE_TYPE_TED;
 	}
 
 	/* Create the internal socket and bind it to localhost in order to
@@ -680,7 +695,8 @@ int main(int argc, char **argv)
 		
 		for (i = 0; i < nfds; i++)
 			 epoll_event_handler(epollfd, events, i, 
-					     esocks, n_esocks, int_sd, hashtb);
+					     esocks, n_esocks, int_sd, hashtb,
+					     &ted_dev_only);
 	}
 
 	HASH_FINI((*hashtb));

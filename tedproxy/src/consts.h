@@ -32,7 +32,7 @@
 #define MAX_QUEUE_SIZE 10
 
 #define IFACE_TYPE_UNSPEC 0
-#define IFACE_TYPE_WLAN 1
+#define IFACE_TYPE_TED 1
 
 #define SOCK_TYPE_UNSPEC 0
 #define SOCK_TYPE_CONTROL 1
@@ -51,5 +51,10 @@
 #define MAX_FRAGS 8 /* Frags array default size, it may be increasing re-allocating */
 
 #define UDP_HEADER_SIZE 8
+
+#define RETRY_COUNT_THRESHOLD 3 
+#define CRITIC_CHECK_WINDOW 30
+#define CRITIC_THRESHOLD 0.1
+
 
 #endif

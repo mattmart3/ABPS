@@ -121,8 +121,8 @@ int utils_get_opt(int argc, char **argv)
 							  "limit is set to %d", MAX_IFACES);
 				}
 
-				if (optarg[0] == 'w' && optarg[1] == ':') {
-					conf.ifaces[conf.nifaces].type = IFACE_TYPE_WLAN;
+				if (optarg[0] == 't' && optarg[1] == ':') {
+					conf.ifaces[conf.nifaces].type = IFACE_TYPE_TED;
 					optarg += 2;
 				}
 				len = asprintf(&(conf.ifaces[conf.nifaces].name), "%s", optarg);

@@ -61,7 +61,9 @@ struct extsock_s {
 	int sd;
 	int queue_cnt[2];
 	struct msg_s queue[2][MAX_QUEUE_SIZE];
-	int pkt_counter; /* Used in test mode */
+	int pkt_counter; /* Used in test mode only */
+	int pkt_risk;
+	int pkt_ok;
 	struct iface_s iface;
 };
 
