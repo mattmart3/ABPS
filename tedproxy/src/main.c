@@ -198,7 +198,8 @@ void hash_table_remove(struct msg_info_s *msg_origin, hashtable *ht, int key)
 
 }
 /* Receive all the ted notification error that are pending in the errqueue */
-void recv_errors(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
+void recv_errors(hashtable *ht, struct extsock_s *esock,
+		 struct extsock_s *esocks, int n_esocks, int *ted_dev_only)
 {
 	struct err_msg_s *error_message;
 
@@ -241,23 +242,28 @@ void recv_errors(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 		}
 
 		risk_ratio = ((float)esock->pkt_risk)/((float)CRITIC_CHECK_WINDOW); 
-		
-		/* When we reach the end of the window, disable the other device(s) if 
-		 * the ted dev is stable (0 risk) and restart the counters. */
-		if (esock->pkt_risk + esock->pkt_ok > CRITIC_CHECK_WINDOW) {
-			if (risk_ratio == 0) {
-				printf("Ted wifi device should be stable\n"
-				       "Deactivating support device\n");
-				*ted_dev_only = 1;
-			}
-			esock->pkt_risk = esock->pkt_ok = 0;
-		}
 
-		/* Enable support from the other device(s) */
-		if (risk_ratio > CRITIC_THRESHOLD) {
+		if (risk_ratio > (float)CRITIC_THRESHOLD) {
 			printf("Critical risk ratio %f, enabling support device\n",
 			      risk_ratio);
 			*ted_dev_only = 0;
+			esock->pkt_risk = esock->pkt_ok = 0;
+		}	
+
+		/* When we reach the end of the window, disable the other device(s) if 
+		 * the ted dev is stable (0 risk) and restart the counters. */
+		if (esock->pkt_risk + esock->pkt_ok > CRITIC_CHECK_WINDOW) {
+			if (risk_ratio <= (float)RISK_RATIO_TOLERANCE && !(*ted_dev_only)) {
+				int i = 0;
+				printf("Ted wifi device should be stable now.\n"
+				       "Deactivating support device(s).\n");
+				*ted_dev_only = 1;
+				/* Empty the queues of the support device(s) */
+				for (i = 0; i < n_esocks; i++) {
+					if (esock->sd != esocks[i].sd)
+						esocks[i].queue_cnt[DIR_INT2EXT] = 0; 
+				}
+			}
 			esock->pkt_risk = esock->pkt_ok = 0;
 		}
 
@@ -305,6 +311,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 	int i, sd, *cnt;
 	struct msg_s *queue;
 
+	buf = NULL;
 	sd = esock->sd;
 	queue = esock->queue[DIR_INT2EXT];
 	cnt = &(esock->queue_cnt[DIR_INT2EXT]);
@@ -332,8 +339,8 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 				break;
 
 			print_dbg("--------------------------------------------"
-				  "-------------------------\n\t\t\t\t\t%s: "
-				  "ted id: %d\n\t\t\t\t\tsize: %zd\n", 
+				  "-------------------------\n\t\t\t\t\t"
+				  "sent from %s, ted id: %d, size: %zd\n", 
 				  esock->iface.name, ted_id, sent);
 
 			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
@@ -351,8 +358,8 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 			if (sent <= 0) 
 				break;
 			print_dbg("--------------------------------------------"
-				  "-------------------------\n\t\t\t\t\t%s: ",
-				  "sent pkt, size: %zd\n", 
+				  "-------------------------\n\t\t\t\t\t",
+				  "sent from: %s, size: %zd\n", 
 				  esock->iface.name, sent);
 		}
 		/* Decrease the queue counter and increase the counter of 
@@ -375,7 +382,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 		}
 	}
 
-	if (conf.test)
+	if (conf.test && buf)
 		free(buf);
 }
 
@@ -443,7 +450,7 @@ void recv_from_ext(struct extsock_s *esock)
 /* Read and push the incoming messages in the forward queue (int to ext)
  * of every external socket. Continue to read until there are no more messages
  * to read or we exeed the buffer queue size of one of the external socket. */
-void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks)
+void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks, int ted_dev_only)
 {
 	char buf[MAX_BUFF_SIZE];
 	int i, *cnt, space;
@@ -459,6 +466,10 @@ void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks)
 				  ret);
 
 			for (i = 0; i < n_esocks; i++) {
+				if (ted_dev_only && 
+				    esocks[i].iface.type != IFACE_TYPE_TED)
+					continue;
+
 				queue = esocks[i].queue[DIR_INT2EXT];
 				cnt = &(esocks[i].queue_cnt[DIR_INT2EXT]); 
 				memcpy(queue[*cnt].buffer, buf, ret);
@@ -521,7 +532,7 @@ void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 		if (events[ev_idx].data.fd == int_sd) {
 			/* Read and enqueue the messages from 
 			 * the internal socket. */
-			recv_from_int(int_sd, esocks, n_esocks);
+			recv_from_int(int_sd, esocks, n_esocks, *ted_dev_only);
 
 			/* Wake all the external sockets when they are
 			 * able to send out messages. */
@@ -559,7 +570,7 @@ void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 	 * interface here. */
 	if (events[ev_idx].events & EPOLLERR) {
 		esock = get_esock(esocks, n_esocks, events[ev_idx].data.fd);
-		recv_errors(hashtb, esock, ted_dev_only);
+		recv_errors(hashtb, esock, esocks, n_esocks, ted_dev_only);
 	}
 }
 
@@ -577,6 +588,8 @@ int main(int argc, char **argv)
 	int n_esocks;
 	int wlan_sock_id;
 	int ted_dev_only;
+
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 	hashtable *hashtb;
 
@@ -628,7 +641,7 @@ int main(int argc, char **argv)
 					exit_err("%s: Only one wlan ted iface is allowed.\n",
 						 __func__);
 				wlan_sock_id = i;
-				ted_dev_only = 0;
+				ted_dev_only = 1;
 			}
 				
 			sd = net_create_socket(conf.ip_vers, SOCK_TYPE_EXTERNAL,
@@ -638,6 +651,8 @@ int main(int argc, char **argv)
 				exit_err("%s: Can't create socket\n", __func__);
 
 			esocks[i].sd = sd;
+			esocks[i].pkt_risk = 0;
+			esocks[i].pkt_ok = 0;
 			esocks[i].iface = conf.ifaces[i];
 			n_esocks++;
 		}
