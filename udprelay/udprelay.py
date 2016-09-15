@@ -71,7 +71,7 @@ rightSource = None
 
 leftLastRtpSNs = {}
 #TODO Handle send to right duplicate suppress
-sys.stderr.write('All set.\n')
+print('All set.\n')
 while True:
 	ready_socks,_,_ = select.select([sl, sr], [], []) 
 	for sock in ready_socks:
