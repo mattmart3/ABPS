@@ -166,7 +166,7 @@ int net_create_socket(int ip_vers, int sock_type,
 		ret = setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE,
 				 (void *)&ifr, sizeof(ifr));
 		if (ret < 0) {
-			print_err("%s: can't bind to device %s,\n%s\n",
+			exit_err("%s: can't bind to device %s,\n%s\n",
 				  __func__, ifname, strerror(errno));
 		}
 	}

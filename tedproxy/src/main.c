@@ -301,7 +301,7 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 }
 
 /* Forward a message to the world through the "external" socket. */
-void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
+void send_to_ext(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 {
 	uint32_t ted_id;
 	struct msg_info_s *info;
@@ -335,8 +335,18 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 
 		if (esock->iface.type == IFACE_TYPE_TED) {
 			sent = net_send_ted_msg(buf, len, &ted_id, sd);
-			if (sent <= 0)
+			if (sent <= 0) {
+				/* Enable the support device(s) if this one is down
+				 * and empty the queue. */
+				/* TODO check this, does it work? */
+				if (*ted_dev_only &&
+				    (errno == ENETDOWN || errno == ENETUNREACH)) {
+					*ted_dev_only = 0;
+					*cnt = 0;
+				}
+
 				break;
+			}
 
 			print_dbg("--------------------------------------------"
 				  "-------------------------\n\t\t\t\t\t"
@@ -353,7 +363,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int ted_dev_only)
 			info->last_frag_received = 0;
 
 			HASH((*ht), (int)ted_id, info);
-		} else if (!ted_dev_only) {
+		} else if (!*ted_dev_only) {
 			sent = net_send_msg(buf, len, sd);
 			if (sent <= 0) 
 				break;
@@ -519,7 +529,7 @@ void epoll_event_handler(int epollfd, struct epoll_event *events, int ev_idx,
 					  "skipping\n", __func__);
 				return;
 			}
-			send_to_ext(hashtb, esock, *ted_dev_only);
+			send_to_ext(hashtb, esock, ted_dev_only);
 		}
 		/* Stop this socket to be awakened until
 		 * we read something from the external sockets. */
