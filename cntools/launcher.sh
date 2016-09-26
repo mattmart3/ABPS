@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 if [ $# -lt 4 ] ; then
 	echo "Usage: $0 <remote_host> <remote_port> <local_port> <outfile.ogg>"
