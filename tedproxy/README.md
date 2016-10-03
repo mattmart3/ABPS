@@ -1,5 +1,5 @@
 This README explains how to to build a custom kernel with the support for TED (Transmission Error Detector) 
-and how to test it with the TED application. Different build methods are needed whether you
+and how to use it with the TED proxy application. Different build methods are needed whether you
  want to build the TED kernel for a GNU Linux distribution or Android distribution, since some additional 
 steps are required for the latter.
 
@@ -27,11 +27,11 @@ If you chose the version 3.4.0 of the kernel you should first apply an official
 
 From the root directory of the linux kernel repository:
 
-	patch -p1 < path_to_abps_repo/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
+	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
 
 Then apply the TED patch. For the 4.1.0 version only this step is needed to patch the kernel sources.
 	
-	patch -p1 < path_to_abps_repo/kernel_patches/ted_linux_(your_chosen_version).patch
+	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/ted_linux_(your_chosen_version).patch
 
 ###Build kernel
 Several well documented guides explaining how to build a custom kernel exists in the web. 
@@ -55,8 +55,50 @@ After your custom kernel is built just run with root privileges:
 or refer to your linux distribution kernel install method.
 
 ##Android
-The following steps are known to be working for the Google Nexus 5.
-- TODO: how to enable su
+The following steps are known to be working, at the time of writing, 
+for the Google Nexus 5 with Android 6 Marshmallow.
+
+###Prerequisites 
+
+###Enable root privileges
+Since TED requires a device which supports mac80211, 
+the inner WiFi module (Broadcom BCM4329) of the Google Nexus 5 can't be used. 
+In fact the BCM4329 module works as a Full MAC device with a proprietary and closed source firmware, 
+without any support for the mac80211 subsystem.
+Anyway the TED kernel and its proxy application can be tested using an external USB WiFi dongle which
+ supports the mac80211 driver interface. To do so, some Android system configuration files must be
+ edited with the root privileges. Also, the tedproxy application binds the
+sockets directly to the network interfaces through the socket option
+SO_BINDTODEVICE which requires root privileges. 
+Root tools for Android, essentially allow users to execute the ``su`` binary
+file which is missing by default for security porpuses.
+
+The tool I used is Superuser (https://github.com/koush/Superuser). It is
+opensource and offers both the boot image that includes the su binary file and the
+permissions control application. The installation procedure for the Nexus 5 is
+quite simple since the superuser community already provides prebuilt boot
+images at the following link:
+
+	https://superuser.phh.me/
+
+Once you have obtained the boot image for your device, first you have to unlock the bootloader, then simply
+ flash the boot image with the fastboot tool (it may damage your device):
+
+	fastboot oem unlock
+	fastboot boot nameofrecovery.img
+
+You can also use a custom recovery such as
+ TWRP (https://twrp.me/about/) which permits to backup your original boot image
+first. 
+
+If there is not a pre built image for your device you should excecute the
+content of the superuser.zip installation file in a custom recovery such as
+TWRP since it can run scripts with root privileges. In brief, if you ``flash``
+the zip file in the TWRP recovery, it extract the zip file and executes the
+extracted scripts. These scripts essentially copy the current boot partition in
+a boot image file, extract the boot image, extract the inner ramdisk image and copy
+the ``su`` binary file into the extracted ramdisk. Lastly a modified boot image
+will be re-created and actually flashed into the device. 
 
 ###Get tools and kernel sources
 First give a look at the official android documentation, in order to understand
@@ -80,8 +122,8 @@ Get the kernel sources:
 ###Patch the kernel
 From the root directory of the android kernel repository:
 
-	patch -p1 < path_to_abps_repo/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
-	patch -p1 < path_to_abps_repo/kernel_patches/ted_linux_3.4.patch
+	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
+	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/ted_linux_3.4.patch
 
 ###Configure and build
 Since TED requires a device which supports mac80211, 
@@ -102,7 +144,7 @@ First of all let's prepare the environment. From the root directory of the andro
 
 Then let's make the configuration. If you are fine with my custom configuration:
 
-	cp path_to_abps_repo/android_build/hammerhead_defconfig_ted .config
+	cp path_to_abps_repo/tedproxy/android_build/hammerhead_defconfig_ted .config
 
 Otherwise if you want to make your own configuration:
 
@@ -137,7 +179,7 @@ from ``kernel/timeconst.pl`` as the comment in the error suggests.
 Once the build is finished, the kernel image is located at ``arch/arm/boot/zImage-dtb``.
 
 ###Enable the USB Wi-Fi Dongle
-As many Android devices, the Nexus 5 starts according to a init script contained in the ramdisk filesystem image, 
+As many Android devices, the Nexus 5 boot process is handled by an init script contained in the ramdisk filesystem image, 
 which itself is contained in the boot image together with the kernel image.
 
 The init script is the one who starts the ``wpa_supplicant`` daemon with the default interface ``wlan0``.
@@ -168,9 +210,9 @@ Once you have your original boot image in your hand, you can proceed with the ex
 
 I recommend to read this http://www.slideshare.net/chrissimmonds/android-bootslides20 and use 
 this tool for the boot image extraction: https://github.com/csimmonds/boot-extract. 
-The latter is mirrored in this repository also under ``path_to_abps_repo/android_build/boot/boot-extract``.
+The latter is mirrored in this repository also under ``path_to_abps_repo/tedproxy/android_build/boot/boot-extract``.
 
-	path_to_abps_repo/android_build/boot/boot-extract/boot-extract boot.img
+	path_to_abps_repo/tedproxy/android_build/boot/boot-extract/boot-extract boot.img
 
 Store the output of the extraction, since it will be necessary later for the boot image re-creation.
 In my case this is the output:
@@ -205,16 +247,16 @@ Finally you can edit the ``init.hammerhead.rc`` file substituting all the ``wlan
 After that, re-create the ramdisk filesystem image with the ``mkbootfs`` tool:
 
 	cd ..
-	path_to_abps_repo/android_build/boot/mkbootfs/mkbootfs ramdisk_dir > ramdisk.ted.cpio
+	path_to_abps_repo/tedproxy/android_build/boot/mkbootfs/mkbootfs ramdisk_dir > ramdisk.ted.cpio
 	gzip ramdisk.ted.cpio
 
 The result is a modified ramdisk image: ``ramdisk.ted.cpio.gz``. If this fails to boot you can try with the
- pre-made custom ramdisk available at ``path_to_abps_repo/android_build/boot/ramdisk.ted.cpio.gz``.
+ pre-made custom ramdisk available at ``path_to_abps_repo/tedproxy/android_build/boot/ramdisk.ted.cpio.gz``.
 
 ####Create the custom boot.img
 Now re-create the boot image from both the custom kernel and the custom ramdisk image:
 
-	path_to_abps_repo/android_build/boot/mkbootimg/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 \
+	path_to_abps_repo/tedproxy/android_build/boot/mkbootimg/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 \
 	--ramdisk_offset 0x02900000 --second_offset 0x00f00000 --tags_offset 0x02700000 \
 	--cmdline 'console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 maxcpus=2 msm_watchdog_v2.enable=1' \
 	--kernel path_to_kernel/zImage-dtb --ramdisk path_to_ramdisk/ramdisk.ted.cpio.gz -o boot.img
