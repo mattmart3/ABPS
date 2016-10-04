@@ -1,11 +1,37 @@
-This README explains how to to build a custom kernel with the support for TED (Transmission Error Detector) 
+# TED kernel and proxy application
+This document explains how to to build a custom kernel with the support for TED (Transmission Error Detector) 
 and how to use it with the TED proxy application. Different build methods are needed whether you
  want to build the TED kernel for a GNU Linux distribution or Android distribution, since some additional 
 steps are required for the latter.
 
-#Kernel build
-##Linux
-###Get kernel sources
+
+* [Build the kernel](#build-the-kernel)
+	* [Linux](#linux)
+		* [Get kernel sources](#get-kernel-sources)
+		* [Patch the kernel](#patch-the-kernel)
+		* [Build kernel](#build-kernel)
+	* [Android](#android)
+		* [Prerequisites](#prerequisites)
+		* [Enable root privileges](#enable-root-privileges)
+		* [Get tools and kernel sources](#get-tools-and-kernel-sources)
+		* [Patch the kernel](#patch-the-kernel-1)
+		* [Configure and build](#configure-and-build)
+			* [Common issues](#common-issues)
+		* [Enable the USB Wi-Fi Dongle](#enable-the-usb-wi-fi-dongle)
+			* [Get the original boot.img](#get-the-original-bootimg)
+			* [Extract the original boot.img](#extract-the-original-bootimg)
+			* [Extract and edit the original ramdisk](#extract-and-edit-the-original-ramdisk)
+			* [Create the custom ramdisk](#create-the-custom-ramdisk)
+			* [Create the custom boot.img](#create-the-custom-bootimg)
+			* [Enable wlan1 in system files](#enable-wlan1-in-system-files)
+			* [Open issue](#open-issue)
+* [Build and run tedproxy](#build-and-run-tedproxy)
+	* [Build](#build)
+	* [Run](#run)
+
+# Build the kernel
+## Linux
+### Get kernel sources
 Clone the linux kernel repository in your local machine.
 
 	git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git linuxrepo
@@ -20,7 +46,7 @@ and manually adjust the TED patch. Let's assume you chose the 4.1.0 version.
 In order to be sure your git head is at the desired version, just check the first 3 lines
 of the Makefile located in the repository root directory.
 
-###Patch the kernel
+### Patch the kernel
 If you chose the version 3.4.0 of the kernel you should first apply an official 
  patch needed by TED to work properly. This patch was introduced in later versions and allows
  TED to read some information about its socket at lower levels of the network stack.
@@ -33,7 +59,7 @@ Then apply the TED patch. For the 4.1.0 version only this step is needed to patc
 	
 	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/ted_linux_(your_chosen_version).patch
 
-###Build kernel
+### Build kernel
 Several well documented guides explaining how to build a custom kernel exists in the web. 
 Let's pick one as instance:
 https://wiki.archlinux.org/index.php/Kernels/Traditional_compilation
@@ -54,13 +80,18 @@ After your custom kernel is built just run with root privileges:
 
 or refer to your linux distribution kernel install method.
 
-##Android
+## Android
 The following steps are known to be working, at the time of writing, 
 for the Google Nexus 5 with Android 6 Marshmallow.
 
-###Prerequisites 
+### Prerequisites 
+You will need some Android tools such as ``adb`` and ``fastboot``. In debian like
+distributions and Arch linux distributions they should be contained in the android-tools
+package. Also you need the ``Android NDK toolset``. This toolset will be used to
+compile the tedproxy application and can be downloaded from the Android
+developers reference website (https://developer.android.com/ndk).
 
-###Enable root privileges
+### Enable root privileges
 Since TED requires a device which supports mac80211, 
 the inner WiFi module (Broadcom BCM4329) of the Google Nexus 5 can't be used. 
 In fact the BCM4329 module works as a Full MAC device with a proprietary and closed source firmware, 
@@ -77,9 +108,7 @@ The tool I used is Superuser (https://github.com/koush/Superuser). It is
 opensource and offers both the boot image that includes the su binary file and the
 permissions control application. The installation procedure for the Nexus 5 is
 quite simple since the superuser community already provides prebuilt boot
-images at the following link:
-
-	https://superuser.phh.me/
+images at https://superuser.phh.me . 
 
 Once you have obtained the boot image for your device, first you have to unlock the bootloader, then simply
  flash the boot image with the fastboot tool (it may damage your device):
@@ -100,7 +129,7 @@ a boot image file, extract the boot image, extract the inner ramdisk image and c
 the ``su`` binary file into the extracted ramdisk. Lastly a modified boot image
 will be re-created and actually flashed into the device. 
 
-###Get tools and kernel sources
+### Get tools and kernel sources
 First give a look at the official android documentation, in order to understand
 what kernel version you need depending on your device and get the right tools:
 https://source.android.com/source/building-kernels.html .
@@ -119,13 +148,13 @@ Get the kernel sources:
 	git clone https://android.googlesource.com/kernel/msm
 	git checkout android-msm-hammerhead-3.4-marshmallow-mr2
 
-###Patch the kernel
+### Patch the kernel
 From the root directory of the android kernel repository:
 
 	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
 	patch -p1 < path_to_abps_repo/ted_proxy/kernel_patches/ted_linux_3.4.patch
 
-###Configure and build
+### Configure and build
 Since TED requires a device which supports mac80211, 
 the inner WiFi module (Broadcom BCM4329) of the Google Nexus 5 can't be used. 
 In fact the BCM4329 module works as  a Full MAC device and a closed source firmware 
@@ -158,7 +187,7 @@ Then start the build:
 (where N is the number of parallel compilation processes you want to spawn).
 
 
-####Common issues
+#### Common issues
 
 Compiling old kernels from a new linux distribution may require some workaround.
 
@@ -178,7 +207,7 @@ from ``kernel/timeconst.pl`` as the comment in the error suggests.
 
 Once the build is finished, the kernel image is located at ``arch/arm/boot/zImage-dtb``.
 
-###Enable the USB Wi-Fi Dongle
+### Enable the USB Wi-Fi Dongle
 As many Android devices, the Nexus 5 boot process is handled by an init script contained in the ramdisk filesystem image, 
 which itself is contained in the boot image together with the kernel image.
 
@@ -190,7 +219,7 @@ modify the ``init.hammerhead.rc`` file substituting all the ``wlan0`` with ``wla
 This repository provides an already modified ramdisk image, anyway here I write the steps you'd need to do in order to
  retrieve your original boot image from the Nexus 5:
 
-####Get the original boot.img
+#### Get the original boot.img
 ```bash
 #use the following commands to find the boot partition
 ls -l /dev/block/platform/
@@ -204,7 +233,7 @@ chmod 0666 /sdcard/boot-from-android-device.img
 ```
 Then you can copy the image in your machine with ``adb pull`` or the MPT protocol.
 
-####Extract the original boot.img
+#### Extract the original boot.img
 
 Once you have your original boot image in your hand, you can proceed with the extraction.
 
@@ -234,7 +263,7 @@ zImage extracted
 ramdisk offset 8845312 (0x86f800)
 ramdisk.cpio.gz extracted
 ```
-####Extract and edit the original ramdisk
+#### Extract and edit the original ramdisk
 Once you have your ramdisk image ``ramdisk.cpio.gz`` you can extract it with:
 
 	mkdir ramdisk_dir
@@ -243,7 +272,7 @@ Once you have your ramdisk image ``ramdisk.cpio.gz`` you can extract it with:
 
 Finally you can edit the ``init.hammerhead.rc`` file substituting all the ``wlan0`` with ``wlan1``.
 
-####Create the custom ramdisk
+#### Create the custom ramdisk
 After that, re-create the ramdisk filesystem image with the ``mkbootfs`` tool:
 
 	cd ..
@@ -253,7 +282,7 @@ After that, re-create the ramdisk filesystem image with the ``mkbootfs`` tool:
 The result is a modified ramdisk image: ``ramdisk.ted.cpio.gz``. If this fails to boot you can try with the
  pre-made custom ramdisk available at ``path_to_abps_repo/tedproxy/android_build/boot/ramdisk.ted.cpio.gz``.
 
-####Create the custom boot.img
+#### Create the custom boot.img
 Now re-create the boot image from both the custom kernel and the custom ramdisk image:
 
 	path_to_abps_repo/tedproxy/android_build/boot/mkbootimg/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 \
@@ -263,11 +292,11 @@ Now re-create the boot image from both the custom kernel and the custom ramdisk 
 
 Note how the offsets correspond to the addresses printed out by the boot image extract script.
 
-####Enable wlan1 in system files
+#### Enable wlan1 in system files
 Editing the init rc file it's not enough, as some other android services still refer to the wlan0 device.
 
 You need to do the substitution of ``wlan0`` with ``wlan1`` also in the files ``/system/build.prop`` and ``/system/etc/dhcpcd/dhcpcd.conf``.
-These files are persistent in the android root filesystem thus you just need to edit them once.
+These files are persistent in the android system partition thus you just need to edit them once.
 
 Also you need to copy the firmware of your WiFi dongle in /system/etc/firmware. You can copy directly from your working machine
  or from the official repository http://git.kernel.org/cgit/linux/kernel/git/firmware/linux-firmware.git .
@@ -289,15 +318,56 @@ Then you can plug the external Wi-Fi dongle with a OTG cable and control the dev
 	
 	adb connect nexus_ip_address:5555
 
-####Open issue
+#### Open issue
 The sleep mode of the external Wi-Fi dongle is not handled properly. In fact turning off the LCD screen cause
- the Wi-Fi device to de-associate from the network. As a simple workaround you can use an app to force 
-your screen active but consider that this will lead to rapidly exhaust the Nexus 5 battery power.
+ the Wi-Fi device to de-associate from the network. As a simple workaround you can use an Android App to force 
+your screen active but consider that this approach will lead your device to rapidly exhaust its battery power.
 
-TESTAPP:
-linux:
-- put uapi in the right folder and just make the app
-android:
-- how to download ndk
-- how to copy uapi in ndk for building the application
-	cp uapi/errqueue.h uapi/socket.h android-ndk-r11c/platforms/android-21/arch-arm/usr/include/linux/
+# Build and run tedproxy
+## Build
+Before you can build the tedproxy application, you must ensure you are running
+a TED custom kernel. Then, some header files called ``user api (or uapi)`` must
+be modified. These headers simply contain declarations of kernel constants and macros that also the user
+applications may need to recall. 
+If you want to build the tedproxy application for linux distributions:
+
+	# cd /usr/include/linux/errqueue.h /usr/include/linux/errqueue.h.bkp
+	# cp /usr/include/linux/socket.h /usr/include/linux/socket.h.bkp
+	# cp path_to_abps_repo/tedproxy/uapi/errqueue.h /usr/include/linux/errqueue.h
+	# cp path_to_abps_repo/tedproxy/uapi/socket.h /usr/include/linux/socket.h
+
+Otherwise if you want to build the tedproxy application for Android:
+
+	$ cd path_to_ndk/platforms/android-21/arch-arm/usr/include/linux
+	$ cp errqueue.h errqueue.h.bkp ; cp socket.h socket.h.bkp
+	$ cp path_to_abps_repo/tedproxy/uapi/errqueue.h errqueue.h
+	$ cp path_to_abps_repo/tedproxy/uapi/socket.h socket.h
+
+At the end you just need to run the ``build.sh`` script with ``linux`` or ``android`` as
+argument for building the respective versions of teproxy. The build.sh is at:
+
+	path_to_abps_repo/tedproxy/tedproxy 
+
+The Android version binary file will be placed at libs/jni/tedproxy and you can 
+copy it on your device with adb push.
+
+## Run
+Tedproxy is intended to work as a local proxy which listens UDP traffic from a
+local bound socket and forwards all the input packets to the remote host through one
+or multiple network interfaces binding a socket for each of them. It also
+forwards back to the local socket, the incoming UDP traffic received from the
+sockets bound to the network devices. With the `-i`
+option you can specify the name of the chosen network interfaces. If one of
+them is a WiFi mac80211 capable device, you can put the `t:` prefix before the
+device name and tproxy will enable TED notification for that device. In this
+case, packets will be forwarded to the ``TED interface`` only as long as the number
+of packets received at the AP is sufficiently high. Whenever this condition is
+no longer satisfied, tedproxy enables also the other network interfaces for
+forwarding traffic.
+
+As instance tedproxy can listen on the UDP local port 5006 and forward
+everything to the host 174.215.25.101 at UDP port 5001 through the wlan1
+mac80211 device and the rmnet0 device, which usually is the cellular network
+interface on Android smartphones:
+
+	tedproxy -b -i t:wlan1 -i rmnet0 5006 174.215.25.101 5001
