@@ -29,6 +29,9 @@
 #include <string.h>
 #include <stdarg.h>
 #include <netinet/in.h>
+#include <time.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 #include "consts.h"
 #include "structs.h"
@@ -76,6 +79,10 @@ void utils_default_conf(void)
 	conf.msg_length = DEFAULT_MSG_LENGTH;
 	conf.nifaces = 0;
 	conf.test = 0;
+	conf.retry_th = RETRY_COUNT_THRESHOLD;
+	conf.cwin = CRITIC_CHECK_WINDOW;
+	conf.ratio_th = (float)RISK_RATIO_THRESHOLD;
+	conf.tolerance = (float)RISK_RATIO_TOLERANCE;
 
 	for (i = 0; i < MAX_IFACES; i++) {
 		conf.ifaces[i].name = NULL;
@@ -101,10 +108,14 @@ int utils_get_opt(int argc, char **argv)
 			{ "size", required_argument, 0, 's'},
 			{ "test", no_argument, 0, 't'},
 			{ "debug", no_argument, 0, 'd'},
+			{ "retry_th", required_argument, 0, 'r'},
+			{ "cwin", required_argument, 0, 'w'},
+			{ "ratio_th", required_argument, 0, 'R'},
+			{ "tolerance", required_argument, 0, 'T'},
 			{ 0, 0, 0, 0 },
 		};
 
-		c = getopt_long(argc, argv, "h6bi:n:s:dt",
+		c = getopt_long(argc, argv, "h6bi:n:s:dtr:w:R:T:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -118,7 +129,7 @@ int utils_get_opt(int argc, char **argv)
 			case 'i':
 				if (conf.nifaces + 1 > MAX_IFACES) {
 					exit_err("Too many network interfaces,"
-							  "limit is set to %d", MAX_IFACES);
+						 "limit is set to %d", MAX_IFACES);
 				}
 
 				if (optarg[0] == 't' && optarg[1] == ':') {
@@ -143,6 +154,18 @@ int utils_get_opt(int argc, char **argv)
 			case 'd':
 				print_dbg = __print_dbg;
 				break;
+			case 'r':
+				conf.retry_th = atoi(optarg);
+				break;
+			case 'w':
+				conf.cwin = atoi(optarg);
+				break;
+			case 'R':
+				conf.ratio_th = (float)atof(optarg);
+				break;
+			case 'T':
+				conf.tolerance = (float)atof(optarg);
+				break;
 			case 'h':
 			default:
 				return -1;
@@ -151,3 +174,47 @@ int utils_get_opt(int argc, char **argv)
 	return 0;
 }
 
+void utils_gen_random(char *s, const int len)
+{
+	static const char alphanum[] =
+		"0123456789"
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"abcdefghijklmnopqrstuvwxyz";
+
+	int i;
+	for (i = 0; i < len; ++i) {
+		s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+	}
+
+	/* Zero terminate the string */
+	s[len] = 0;
+}
+
+int utils_get_rtpid(char *buf, ssize_t len, uint16_t *rtpid)
+{
+	if (len < 4)
+		return -1;
+
+	*rtpid = (buf[2] << 8) | buf[3];
+	
+	return 0;
+}
+
+uint64_t utils_get_timestamp()
+{
+	struct timespec tms;
+
+	if (clock_gettime(CLOCK_REALTIME, &tms) != 0)
+		exit_err("%s: error with clock_gettime\n", __func__);
+
+	/* seconds, multiplied with 1 million */
+	uint64_t micros = tms.tv_sec * 1000000;
+	/* Add full microseconds */
+	micros += tms.tv_nsec/1000;
+	/* round up if necessary */
+	if (tms.tv_nsec % 1000 >= 500) {
+		++micros;
+	}
+
+	return micros;
+}

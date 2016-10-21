@@ -30,6 +30,9 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 #include "network.h"
 #include "tederror.h"
@@ -51,10 +54,23 @@ OPTIONS:\n\
                          Adding 't:' before the interface name, TED notifications\n\
                          will be enabled for this device which MUST be a mac80211\n\
                          device and this app MUST run on a TED patched kernel.\n\
+    -d, --debug          Enable debug messages.\n\
+\n\
+HANDOVER DECISION OPTIONS:\n\
+    -r, --retry_th       Retry count threshold: the number of retries after a wifi\n\
+                         frame must be considered as risky.\n\
+    -w, --cwin           Critic check window: the number of packets that defines\n\
+                         the size of a check window.\n\
+    -R, --ratio_th       The critic ratio (risk pkts / total pkts in cwin) threshold.\n\
+                         When this limit is exceeded, the other NIC(s) are enabled.\n\
+                         It must be a float value.\n\
+    -T, --tolerance      The ratio tolerance. If the ratio (risk pkts / total pkts in cwin)\n\
+                         is under this tolerance, the packets are sent only through\n\
+                         the TED enabled interface (if any). It must be a float value.\n\
+TEST MODE OPTIONS:\n\
     -t, --test           Run in test mode.\n\
     -n, --npkts=N_PKTS   Specify how many packets must be sent (test mode only).\n\
-    -s, --size=PKT_SIZE  Specify how big (bytes) a packet must be (test mode only).\n\
-    -d, --debug          Enable debug messages.\n"
+    -s, --size=PKT_SIZE  Specify how big (bytes) a packet must be (test mode only).\n"
 
 
 int epoll_init()
@@ -83,21 +99,6 @@ int epoll_add_socket(int epollfd, int sd, int iface_type)
 	return 0;
 }
 
-void gen_random(char *s, const int len) {
-	static const char alphanum[] =
-		"0123456789"
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-		"abcdefghijklmnopqrstuvwxyz";
-
-	int i;
-	for (i = 0; i < len; ++i) {
-		s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-	}
-
-	/* Zero terminate the string */
-	s[len] = 0;
-}
-
 /* Compose a new simple message of a fixed size. */
 char * new_msg(void)
 {
@@ -109,7 +110,7 @@ char * new_msg(void)
 		exit_err("%s: malloc failed", __func__);
 
 	/* Fill the message content */
-	gen_random(content, conf.msg_length);
+	utils_gen_random(content, conf.msg_length);
 	
 	return content;
 }
@@ -186,6 +187,17 @@ int queues_have_space(struct extsock_s esocks[], int n, int direction)
 
 }
 
+void empty_idle_queues(struct extsock_s esocks[], int n, int ted_dev_only)
+{
+	int i;
+	for (i = 0; i < n; i++) {
+		if (esocks[i].iface.type != IFACE_TYPE_TED && ted_dev_only) { 
+			esocks[i].queue_cnt[0] = 0;
+			esocks[i].queue_cnt[1] = 0;
+		}
+	}
+}
+
 void hash_table_remove(struct msg_info_s *msg_origin, hashtable *ht, int key)
 {
 	int i;
@@ -204,11 +216,12 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 	struct err_msg_s *error_message;
 
 	/* Receive all the notifications in the errqueue.
-	 * tederror_recv_nowait returns false if the errqueue is empty. */
+	 * net_recv_err returns false if the errqueue is empty. */
 	while (net_recv_err(&error_message, esock->sd) > 0) {
 		struct ted_info_s *ted_info;
 		struct msg_info_s *msg_origin;
 		int key, there_is_ted;
+		uint16_t rtp_id;
 		float risk_ratio;
 
 		ted_info = (struct ted_info_s *)malloc(sizeof(struct ted_info_s));
@@ -222,28 +235,20 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 			continue;
 		}
 
-		print_dbg("-------------------------------------------------"
-		       "--------------------\nTED notified ID: %d \n",
-		       ted_info->msg_id);
-
-		print_dbg("msg_id: %d, retry_count: %d, acked: %d\n"
-		       "more_frag: %d, frag_len: %d, frag_off: %d\n",
-		       ted_info->msg_id, ted_info->retry_count, ted_info->status,
-		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
 		
 		/* We have two counters: drop (which takes also those with high retransmission) 
 		 * and sent packets which are considered in a transmission window.
 		 * If the risk/safe ratio is above a certain threshold we can 
 		 * activate the second network interface */
-		if (!ted_info->status || ted_info->retry_count > RETRY_COUNT_THRESHOLD) {
+		if (!ted_info->status || (ted_info->retry_count > conf.retry_th)) {
 			esock->pkt_risk++;
 		} else {
 			esock->pkt_ok++;
 		}
 
-		risk_ratio = ((float)esock->pkt_risk)/((float)CRITIC_CHECK_WINDOW); 
+		risk_ratio = ((float)esock->pkt_risk)/conf.cwin; 
 
-		if (risk_ratio > (float)CRITIC_THRESHOLD) {
+		if (risk_ratio > (float)conf.ratio_th) {
 			printf("Critical risk ratio %f, enabling support device\n",
 			      risk_ratio);
 			*ted_dev_only = 0;
@@ -252,8 +257,8 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 
 		/* When we reach the end of the window, disable the other device(s) if 
 		 * the ted dev is stable (0 risk) and restart the counters. */
-		if (esock->pkt_risk + esock->pkt_ok > CRITIC_CHECK_WINDOW) {
-			if (risk_ratio <= (float)RISK_RATIO_TOLERANCE && !(*ted_dev_only)) {
+		if (esock->pkt_risk + esock->pkt_ok > conf.cwin) {
+			if (risk_ratio <= conf.tolerance && !(*ted_dev_only)) {
 				int i = 0;
 				printf("Ted wifi device should be stable now.\n"
 				       "Deactivating support device(s).\n");
@@ -273,11 +278,19 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 		if (msg_origin == NULL) {
 			exit_err("%s:No key %d in the ht\n", __func__, key);
 
-		} else if (ted_info->more_frag == 0 &&
-		           ted_info->frag_offset == 0) {
+		}
+		
+		utils_get_rtpid(msg_origin->buf, msg_origin->size, &rtp_id);
+		print_dbg("-------------------------------------------------"
+		       "--------------------\n"
+		       "TED, msg_id: %d, retry_count: %d, acked: %d, rtp_id: %d, risk_ratio: %f\n"
+		       "more_frag: %d, frag_len: %d, frag_off: %d\n",
+		       ted_info->msg_id, ted_info->retry_count, ted_info->status, rtp_id, risk_ratio,
+		       ted_info->more_frag, ted_info->frag_length, ted_info->frag_offset);
+		
+		if (ted_info->more_frag == 0 && ted_info->frag_offset == 0) {
 			/* Not fragmented */
 			hash_table_remove(msg_origin, ht, key);
-
 		} else {
 			msg_origin->frags[msg_origin->n_frags] = ted_info;
 			if (msg_origin->n_frags > MAX_FRAGS)
@@ -304,6 +317,7 @@ void recv_errors(hashtable *ht, struct extsock_s *esock,
 void send_to_ext(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 {
 	uint32_t ted_id;
+	uint16_t rtp_id;
 	struct msg_info_s *info;
 	char *buf;
 	size_t len;
@@ -339,8 +353,7 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 				/* Enable the support device(s) if this one is down
 				 * and empty the queue. */
 				/* TODO check this, does it work? */
-				if (*ted_dev_only &&
-				    (errno == ENETDOWN || errno == ENETUNREACH)) {
+				if ((errno == ENETDOWN || errno == ENETUNREACH)) {
 					*ted_dev_only = 0;
 					*cnt = 0;
 				}
@@ -348,29 +361,40 @@ void send_to_ext(hashtable *ht, struct extsock_s *esock, int *ted_dev_only)
 				break;
 			}
 
+			utils_get_rtpid(buf, sent, &rtp_id);
 			print_dbg("--------------------------------------------"
 				  "-------------------------\n\t\t\t\t\t"
-				  "sent from %s, ted id: %d, size: %zd\n", 
-				  esock->iface.name, ted_id, sent);
+				  "sent_ext from: %s, size: %zd, rtp_id: %d, ted_id: %d, ts: %"PRId64"\n", 
+				  esock->iface.name, sent, rtp_id, ted_id, utils_get_timestamp());
 
 			info = (struct msg_info_s *)malloc(sizeof(struct msg_info_s));
 			if (info == NULL)
 				exit_err("%s: malloc failed", __func__);
 
-			info->size = len;
+			info->size = sent;
 			info->id = ted_id;
 			info->n_frags = 0;
 			info->last_frag_received = 0;
 
+			memcpy((void *)info->buf, (void *)buf, sent); 
+
 			HASH((*ht), (int)ted_id, info);
+
 		} else if (!*ted_dev_only) {
 			sent = net_send_msg(buf, len, sd);
-			if (sent <= 0) 
+			if (sent <= 0) {
+				/* Disable this dev if down and empty its queue */
+				if ((errno == ENETDOWN || errno == ENETUNREACH)) {
+					*ted_dev_only = 1;
+					*cnt = 0;
+				}
 				break;
+			}
+			utils_get_rtpid(buf, sent, &rtp_id);
 			print_dbg("--------------------------------------------"
-				  "-------------------------\n\t\t\t\t\t",
-				  "sent from: %s, size: %zd\n", 
-				  esock->iface.name, sent);
+				  "-------------------------\n\t\t\t\t\t"
+				  "sent_ext from: %s, size: %zd, rtp_id: %d, ts: %"PRId64"\n", 
+				  esock->iface.name, sent, rtp_id, utils_get_timestamp());
 		}
 		/* Decrease the queue counter and increase the counter of 
 		 * sent message */
@@ -488,9 +512,11 @@ void recv_from_int(int sd, struct extsock_s *esocks, int n_esocks, int ted_dev_o
 			}
 		}
 	} 
-	if (!space)
+	if (!space) {
 		print_dbg("%s: Not all external sockets have space.\n"
 			  "Pause reading.\n", __func__);
+		empty_idle_queues(esocks, n_esocks, ted_dev_only);
+	}
 
 	if (ret < 0 && errno != EAGAIN) {
 		print_err("%s: recvfrom failed with error (%s).\n",
@@ -661,6 +687,8 @@ int main(int argc, char **argv)
 				exit_err("%s: Can't create socket\n", __func__);
 
 			esocks[i].sd = sd;
+			esocks[i].queue_cnt[0] = 0;
+			esocks[i].queue_cnt[1] = 0;
 			esocks[i].pkt_risk = 0;
 			esocks[i].pkt_ok = 0;
 			esocks[i].iface = conf.ifaces[i];
@@ -685,6 +713,8 @@ int main(int argc, char **argv)
 		esocks[0].iface.type = IFACE_TYPE_TED;
 	}
 
+	print_dbg("retry th:%d\ncwin:%d\nratio_th:%f\ntolerance:%f\n",
+		  conf.retry_th, conf.cwin, conf.ratio_th, conf.tolerance);
 	/* Create the internal socket and bind it to localhost in order to
 	 * let it receive the incoming messages from the local application. */
 	int_sd = net_create_socket(conf.ip_vers, SOCK_TYPE_INTERNAL, NULL, int_port, NULL, 0);

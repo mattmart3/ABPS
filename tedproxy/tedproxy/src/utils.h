@@ -24,6 +24,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <inttypes.h>
 #include "structs.h"
 
 extern struct conf_s conf;
@@ -33,6 +34,9 @@ void print_err(const char *fmt, ...);
 void exit_err(const char *fmt, ...);
 void utils_default_conf(void);
 int utils_get_opt(int argc, char **argv);
+void utils_gen_random(char *s, const int len);
+int utils_get_rtpid(char *buf, ssize_t len, uint16_t *rtp_id);
+uint64_t utils_get_timestamp(void);
 
 
 #endif

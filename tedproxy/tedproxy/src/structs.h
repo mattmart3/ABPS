@@ -44,6 +44,10 @@ struct conf_s {
 	int msg_length;
 	int nifaces;
 	int test;
+	int retry_th;
+	int cwin;
+	float ratio_th;
+	float tolerance;
  	struct iface_s ifaces[MAX_IFACES];
 
 };
@@ -75,7 +79,6 @@ struct ted_info_s {
 	uint16_t frag_offset;
 	uint8_t more_frag;
 	uint8_t ip_vers;
-	char *msg_pload;
 };
 
 struct msg_info_s {
@@ -85,6 +88,7 @@ struct msg_info_s {
 	struct ted_info_s *frags[MAX_FRAGS];
 	int n_frags;
 	short int last_frag_received;
+	char buf[MAX_BUFF_SIZE];
 };
 
 struct err_msg_s {
