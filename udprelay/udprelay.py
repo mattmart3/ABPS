@@ -9,7 +9,7 @@
 
 MAX_BUFF_SIZE = 32768
 
-import sys, socket, select, bitstring
+import sys, socket, select, bitstring, time
 
 def fail(reason):
 	sys.stderr.write(reason + '\n')
@@ -100,7 +100,7 @@ while True:
 					leftLastRtpSNs[ssrc] = sn
 					sentto = rightSource
 
-			print("lxrecvfrom: ", addr , " sn: "+ str(sn) + " ssrc: " + str(ssrc) + " ts:" + str(timestamp) + " rxsentto: " , sentto)
+			print("lxrecvfrom: ", addr , " sn: "+ str(sn) + " ssrc: " + str(ssrc) + " rtpts: " + str(timestamp) + " rxsentto: " , sentto , " ts: " + str(time.time()))
 		else :
 			if sock.fileno() == sr.fileno():
 				print("Received on right socket from " , addr)
