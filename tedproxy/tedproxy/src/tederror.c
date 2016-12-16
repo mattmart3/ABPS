@@ -84,7 +84,6 @@ void __get_ted_info(struct err_msg_s *emsg, struct ted_info_s *ted_info)
 	ted_info->more_frag = ted_more_fragment(emsg->ee);
 	ted_info->frag_length = ted_fragment_length(emsg->ee);
 	ted_info->frag_offset = ted_fragment_offset(emsg->ee);	
-	ted_info->msg_pload = emsg->errmsg;
 }
 
 

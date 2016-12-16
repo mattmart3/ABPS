@@ -1,0 +1,568 @@
+\documentclass[a4paper]{article}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{graphicx}
+\usepackage{fullpage}
+\usepackage{listings}
+\usepackage[lighttt]{lmodern}
+\usepackage[linktocpage]{hyperref}
+\usepackage{xcolor}
+\usepackage{setspace}
+\lstset{
+	language=C, 
+	basicstyle=\ttfamily\fontsize{8.8}{9}\selectfont,
+	keywordstyle=\bfseries,
+    showstringspaces=false,
+	stringstyle=\color{red}\ttfamily,
+    commentstyle=\color{gray}\ttfamily,
+	breaklines=true,
+	frame=single,
+}
+
+
+
+\title{ABPS Documentation for Testers and Developers}
+\author{Matteo Martelli}
+
+\begin{document}
+
+\maketitle
+{
+	\begin{spacing}{0.2}
+		\tiny
+		\vspace*{\fill}
+		% Conditional image
+		\begin{center}
+			\IfFileExists{ccbysa.pdf} {
+				\includegraphics{ccbysa.pdf}
+			}{}
+		\end{center}
+		Copyright\copyright  2016, Matteo Martelli, Università di Bologna, Italy.
+		This work is licensed under the Creative Commons Attribution-ShareAlike 3.0 License
+		(CC-BY-SA). To view a copy of this license, visit
+		\url{http://creativecommons.org/licenses/bysa/3.0/}
+		or send a letter to Creative Commons, 543 Howard Street, 5th Floor, San
+		Francisco, California, 94105, USA.
+		\\\\
+		The network topology icons used in figures of this document are property of Cisco
+		Systems, Inc. Use of these element icons (in an unmodified format) is authorized, without additional permission from Cisco.
+        \url{https://www.cisco.com/cisco/web/siteassets/contacts/index.html},
+		\url{https://www.cisco.com/c/en/us/about/brand-center/network-topology-icons.html}.
+	\end{spacing}
+}
+
+\newpage
+
+This document describes the steps and actions required for
+building all the ABPS software parts I have implemented. They
+form essentially an early ``documentation for testers and developers''
+whose intent is to provide a
+guideline for deploying the same test scenarios I used in my analysis
+phase and for setting up an implementation starting point for future
+developers.
+
+At the time of writing this documentation is maintained on my personal ABPS github
+repository: \emph{https://github.com/matteomartelli/ABPS}. Often in the
+next sections it will be used the terms ``this repository'' or the ``abps
+repo'' in reference of such repository. Thus the first required step is to
+clone the repository since it contains all the software tools which this
+documentation refers to:
+
+\lstset{language=bash,
+morekeywords={cp, git, clone, checkout, patch, make, fastboot, sudo, su, mv,
+ls, chmod, mkdir, zcat, gzip, adb, python3},
+deletekeywords={enable}}
+\begin{lstlisting}
+git clone https://github.com/matteomartelli/ABPS.git
+\end{lstlisting}
+
+\section{TED kernel and proxy application}
+This section explains how to to build a custom kernel with the support for TED (Transmission Error Detector) 
+and how to use it with the TED proxy application. Different build methods are needed whether you
+ want to build the TED kernel for a GNU Linux distribution or Android distribution, since some additional 
+steps are required for the latter.
+
+\subsection{Build Linux kernel}
+\subsubsection{Get kernel sources}
+Clone the linux kernel repository in your local machine.
+
+\begin{lstlisting}
+git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git linuxrepo
+\end{lstlisting}
+
+Then move to the version branch you want to build. 
+TED patches are currently available for versions 4.1.0 and 3.4.0 but you can always move to a different version branch
+and manually adjust the TED patch. Let's assume you chose the 4.1.0 version.
+
+\begin{lstlisting}
+cd linuxrepo
+git checkout v4.1
+\end{lstlisting}
+
+In order to be sure your git head is at the desired version, just check the first 3 lines
+of the Makefile located in the repository root directory.
+
+\subsubsection{Patch the kernel}
+If you chose the version 3.4.0 of the kernel you should first apply an official 
+ patch needed by TED to work properly. This patch was introduced in later versions and allows
+ TED to read some information about its socket at lower levels of the network stack.
+
+From the root directory of the linux kernel repository:
+
+\begin{lstlisting}
+patch -p1 < abps_repo/ted_proxy/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
+\end{lstlisting}
+
+Then apply the TED patch. For the 4.1.0 version only this step is needed to patch the kernel sources.
+\begin{lstlisting}	
+patch -p1 < abps_repo/ted_proxy/kernel_patches/ted_linux_(your_chosen_version).patch
+\end{lstlisting}
+
+\subsubsection{Build kernel}
+Several well documented guides explaining how to build a custom kernel
+exists in the web\cite{kernelcompilation}\cite{kernelcompilation2}.
+
+As guide \cite{kernelcompilation} explains, \texttt{make
+localmodconf} 
+is recommended for faster compilation but be sure that all the modules you will need later 
+are currently loaded.  
+At the end, just run to start the build:
+
+\begin{lstlisting}	
+make -jN
+\end{lstlisting}
+
+(where N is the number of parallel compilation processes you want to spawn).
+
+After your custom kernel is built just run with root privileges:
+\begin{lstlisting}
+make modules_install
+make install
+\end{lstlisting}
+
+or refer to your linux distribution kernel install method.
+
+\subsection{Android}
+The following steps are known to be working, at the time of writing, 
+for the LG Nexus 5 with Android 6 Marshmallow.
+
+\subsubsection{Prerequisites} 
+You will need some Android tools such as \texttt{adb} and \texttt{fastboot}. In debian like
+distributions and Arch linux distributions they should be available
+through the \texttt{android-tools}
+package. Also you need the ``Android NDK toolset''. This toolset will be used to
+compile the \texttt{tedproxy} application and can be downloaded from the Android
+developers reference website\cite{androiddev}.
+
+\subsubsection{Enable root privileges}
+Since TED requires a device which supports mac80211, 
+the inner WiFi module (Broadcom BCM4329) of the LG Nexus 5 can't be used. 
+In fact the BCM4329 module works as a Full MAC device with a proprietary and closed source firmware, 
+without any support for the mac80211 subsystem.
+Anyway the TED kernel and its proxy application can be tested using an external USB WiFi dongle which
+ supports the mac80211 driver interface. To do so, some Android system configuration files must be
+ edited with root privileges. Also, the \texttt{tedproxy} application binds the
+sockets directly to the network interfaces through the socket option
+\texttt{SO\_BINDTODEVICE} which requires root privileges. 
+Root tools for Android, essentially allow users to execute the \texttt{su} binary
+file which is missing by default for security purposes.
+
+The tool I used is Superuser\cite{superuser}. It is
+open source and offers both the boot image that includes the su binary file and the
+permissions control application. The installation procedure for the Nexus 5 is
+quite simple since the superuser community already provides pre-built boot
+images at \url{https://superuser.phh.me}. 
+
+Once you have obtained the boot image for your device, first you have to unlock the bootloader, then simply
+ flash the boot image with the fastboot tool (it may damage your device):
+
+\begin{lstlisting}
+fastboot oem unlock
+fastboot boot nameofrecovery.img
+\end{lstlisting}
+You can also use a custom recovery such as
+TWRP\cite{twrp} which allows you to backup the original boot image
+first. 
+
+If a pre-built image for your device is not available you should execute the
+content of the superuser.zip installation file in a custom recovery such as
+TWRP since it can run scripts with root privileges. In brief, if you ``flash''
+the zip file in the TWRP recovery, it extract the zip file and executes the
+extracted scripts. These scripts essentially copy the current boot partition in
+a boot image file, extract the boot image, extract the inner ramdisk image and copy
+the \texttt{su} binary file into the extracted ramdisk. Lastly a modified boot image
+will be re-created and actually flashed to the device. 
+
+\subsubsection{Get tools and kernel sources}
+First take a look at the official android
+documentation\cite{androidkernel} in order to understand
+which kernel version you need depending on your device and get the right
+tools.
+These are the steps needed to get the right tools and kernel version for 
+a LG Nexus 5 device.
+
+Get the pre-built toolchain (compiler, liker, etc..), move it wherever you like and export its path:
+\begin{lstlisting}
+git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6
+sudo mv arm-eabi-4.6 /opt/
+export PATH=/opt/arm-eabi-4.6/bin:\$PATH
+\end{lstlisting}
+You can also copy the last line inside your \texttt{.bashrc}.
+
+Get the kernel sources:
+
+\begin{lstlisting}
+git clone https://android.googlesource.com/kernel/msm
+git checkout android-msm-hammerhead-3.4-marshmallow-mr2
+\end{lstlisting}
+
+\subsection{Patch the kernel}
+From the root directory of the android kernel repository:
+
+\begin{lstlisting}
+patch -p1 < abps_repo/ted_proxy/kernel_patches/net-remove-skb_orphan_try.3.4.5.patch
+patch -p1 < abps_repo/ted_proxy/kernel_patches/ted_linux_3.4.patch
+\end{lstlisting}
+
+\subsubsection{Configure and build}
+In order to test TED with the Nexus 5 you should add in your custom kernel the
+ support for a USB Wi-Fi dongle that is mac80211 capable. This repo provide a 
+custom configuration which add the support for the Atheros
+\texttt{ath9k\_htc} and Ralink \texttt{rt2800}.
+You can of course make your own configuration to add the support for different devices.
+
+First of all let's prepare the environment. From the root directory of the android kernel repository:
+
+\begin{lstlisting}
+export ARCH=arm
+export SUBARCH=arm
+export CROSS_COMPILE=arm-eabi-
+\end{lstlisting}
+Then let's make the configuration. If you are fine with my custom configuration:
+
+\begin{lstlisting}
+cp abps_repo/tedproxy/android_build/hammerhead_defconfig_ted .config
+\end{lstlisting}
+
+Otherwise if you want to make your own configuration:
+
+\begin{lstlisting}
+cp arch/arm/configs/hammerhead_deconfig .config
+make menuconfig
+\end{lstlisting}
+
+Then start the build:
+
+\begin{lstlisting}
+make -jN
+\end{lstlisting}
+
+(where N is the number of parallel compilation processes you want to spawn).
+
+
+\subsubsection{Common issues}
+
+Compiling old kernels from a new linux distribution may require some workaround.
+
+If you encounter an error on \texttt{scripts/gcc-wrapper.py}, it may be caused by the fact that
+your default python binary links to \texttt{python3} while that script wants
+\texttt{python2}.
+
+A simple workaround consists in replacing the first line of
+\texttt{scripts/gcc-wrapper.py} with:
+
+\begin{lstlisting}
+#! /usr/bin/env python2
+\end{lstlisting}
+
+Another error that you may encounter is 
+
+\begin{lstlisting}
+Can't use 'defined(@array) (Maybe you should just omit the defined()?) at kernel/timeconst.pl
+\end{lstlisting}
+
+To avoid this just remove all the \texttt{defined()} invocation, without removing the inner array variables, 
+from \texttt{kernel/timeconst.pl} as the comment in the error suggests.
+
+Once the build is finished, the kernel image is located at
+\texttt{arch/arm/boot/zImage-dtb}.
+
+\subsubsection{Enable the USB Wi-Fi Dongle}
+As many Android devices, the Nexus 5 boot process is handled by an init script contained in the ramdisk filesystem image, 
+which is itself contained in the boot image together with the kernel image.
+
+The init script is the one who starts the \texttt{wpa\_supplicant} daemon with
+the default interface \texttt{wlan0}.
+I had to modify the init script inside the ramdisk image in order to
+start \texttt{wpa\_supplicant} with the external
+usb dongle, which is \texttt{wlan1}. To do so, you'd need to extract the original boot image from your device, extract the ramdisk image,
+modify the \texttt{init.hammerhead.rc} file substituting all the \texttt{wlan0}
+with \texttt{wlan1}.
+
+This repository already provides a modified ramdisk image, anyway these
+are the steps you'd need to follow in order to
+ retrieve your original boot image from the Nexus 5:
+
+\paragraph{Get the original boot.img}
+  $ $\\ %hack to go to new line
+
+\begin{lstlisting}
+#use the following commands to find the boot partition
+ls -l /dev/block/platform/
+#now we know the device platform is msm_sdcc.1
+ls -l /dev/block/platform/msm_sdcc.1/by-name
+#now we know the boot partition is mmcblk0p19
+#by [boot -> /dev/block/mmcblk0p19]
+#use the following command to retrieve the boot.img
+su
+cat /dev/block/mmcblk0p19 > \
+    /sdcard/boot-from-android-device.img
+chmod 0666 /sdcard/boot-from-android-device.img
+\end{lstlisting}
+
+You can then copy the image to your machine with \texttt{adb pull} or the MTP protocol.
+
+\paragraph{Extract the original boot.img}
+
+Once you have your original boot image in your hand, you can proceed with the extraction.
+
+I recommend to read this guide\cite{androidboot} and use 
+this tool\cite{bootextract} for the boot image extraction. 
+The latter is also mirrored in this repository also under
+\texttt{abps\_repo/tedproxy/android\_build/boot/boot-extract}.
+\begin{lstlisting}
+./boot-extract boot.img
+\end{lstlisting}
+
+Store the output of the extraction, since it will be necessary later for the boot image re-creation.
+In my case this is the output:
+
+\begin{lstlisting}
+Boot header
+  flash page size	2048
+  kernel size		0x86e968
+  kernel load addr	0x8000
+  ramdisk size		0x12dab8
+  ramdisk load addr	0x2900000
+  second size		0x0
+  second load addr	0xf00000
+  tags addr	 	0x2700000
+  product name		''
+  kernel cmdline	'console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 maxcpus=2 msm_watchdog_v2.enable=1'
+
+zImage extracted
+ramdisk offset 8845312 (0x86f800)
+ramdisk.cpio.gz extracted
+\end{lstlisting}
+\paragraph{Extract and edit the original ramdisk}
+Once you have your ramdisk image \texttt{ramdisk.cpio.gz} you can extract it with:
+
+\begin{lstlisting}
+mkdir ramdisk_dir
+cd ramdisk_dir
+zcat ../ramdisk.cpio.gz | cpio -i
+\end{lstlisting}
+
+Finally you can edit the \texttt{init.hammerhead.rc} file substituting all the \texttt{wlan0} with \texttt{wlan1}.
+
+\paragraph{Create the custom ramdisk}
+After that, re-create the ramdisk filesystem image with the \texttt{mkbootfs} tool:
+
+\begin{lstlisting}
+cd ..
+abps_repo/tedproxy/android_build/boot/mkbootfs/mkbootfs ramdisk_dir > ramdisk.ted.cpio
+gzip ramdisk.ted.cpio
+\end{lstlisting}
+
+The result is a modified ramdisk image: \texttt{ramdisk.ted.cpio.gz}. If this fails to boot you can try with the
+ pre-made custom ramdisk available at
+ \texttt{path\_to\_abps\_repo/tedproxy/android\_build/boot/ramdisk.ted.cpio.gz}.
+
+ \paragraph{Create the custom boot.img}
+Now re-create the boot image from both the custom kernel and the custom ramdisk image:
+
+\begin{lstlisting}
+abps_repo/tedproxy/android_build/boot/mkbootimg/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 \
+--ramdisk_offset 0x02900000 --second_offset 0x00f00000 --tags_offset 0x02700000 \
+--cmdline 'console=ttyHSL0,115200,n8 androidboot.hardware=hammerhead user_debug=31 maxcpus=2 msm_watchdog_v2.enable=1' \
+--kernel path_to_kernel/zImage-dtb --ramdisk path_to_ramdisk/ramdisk.ted.cpio.gz -o boot.img
+\end{lstlisting}
+
+Note how the offsets correspond to the addresses printed out by the boot image extract script.
+
+\paragraph{Enable wlan1 in system files}
+Editing the init.rc file is not enough, as some other Android services still refer to the wlan0 device.
+
+You need also to substitute \texttt{wlan0} with \texttt{wlan1} in \texttt{/system/build.prop} and \texttt{/system/etc/dhcpcd/dhcpcd.conf}.
+These files are persistent in the Android system partition thus you just need to edit them once.
+
+Also you need to copy the firmware of your WiFi dongle in /system/etc/firmware. You can copy directly from your working machine
+ or from the official repository\cite{firmwarerepo}.
+
+At the end you can boot the custom boot.img with fastboot:
+	
+\begin{lstlisting}
+adb reboot bootloader
+sudo fastboot boot boot.img
+\end{lstlisting}
+
+Or if you are sure of what you are doing you can flash it:
+
+\begin{lstlisting}
+sudo fastboot flash boot boot.img
+\end{lstlisting}
+
+Once the Nexus rebooted it can be useful to activate the remote adb access:
+
+\begin{lstlisting}
+adb tcpip 5555
+\end{lstlisting}
+
+Then you can plug the external Wi-Fi dongle with an OTG cable and control the device with remote adb:
+	
+\begin{lstlisting}
+adb connect nexus_ip_address:5555
+\end{lstlisting}
+
+\paragraph{Open issue}
+The sleep mode of the external Wi-Fi dongle is not handled properly. In fact turning off the LCD screen cause
+ the Wi-Fi device to de-associate from the network. As a simple workaround you can use an Android App to force 
+your screen active but consider that this approach will lead your device to rapidly exhaust its battery power.
+
+\section{Build and run \texttt{tedproxy}}
+\subsection{Build}
+Before you can build the \texttt{tedproxy} application you must ensure you are running
+a TED custom kernel. Then some header files called ``user api (or uapi)'' must
+be modified. These headers simply contain declarations of kernel constants and macros that also the user
+applications may need to recall. 
+If you want to build the \texttt{tedproxy} application for linux distributions:
+
+\begin{lstlisting}[language=C]
+su
+cp /usr/include/linux/errqueue.h \
+    /usr/include/linux/errqueue.h.bkp
+cp /usr/include/linux/socket.h \
+    /usr/include/linux/socket.h.bkp
+cp abps_repo/tedproxy/uapi/errqueue.h \
+    /usr/include/linux/errqueue.h
+cp abps_repo/tedproxy/uapi/socket.h \
+    /usr/include/linux/socket.h
+\end{lstlisting}
+
+Otherwise if you want to build the \texttt{tedproxy} application for Android:
+
+\begin{lstlisting}
+cd path_to_ndk/platforms/android-21/arch-arm/usr/include/linux
+cp errqueue.h errqueue.h.bkp ; cp socket.h socket.h.bkp
+cp abps_repo/tedproxy/uapi/errqueue.h errqueue.h
+cp abps_repo/tedproxy/uapi/socket.h socket.h
+\end{lstlisting}
+
+At the end you just need to run the \texttt{build.sh} script with \texttt{linux} or \texttt{android} as
+argument for building the respective versions of teproxy. 
+The build.sh is at \texttt{path\_to\_abps\_repo/tedproxy/tedproxy}.
+
+The Android version binary file will be placed at
+ \texttt{libs/jni/tedproxy} and you can 
+copy it on your device with adb push.
+
+\subsection{Run}
+\texttt{tedproxy} is intended to work as a local proxy which listens UDP traffic from a
+local bound socket and forwards all the input packets to the remote host through one
+or multiple network interfaces binding a socket for each one. With the `-i`
+option you can specify the name of the chosen network interfaces. If one of
+them is a WiFi mac80211 capable device, you can put the `t:` prefix before the
+device name and tproxy will enable TED notification for that device. In this
+case, packets will be forwarded to the ``TED interface'' only as long as the number
+of packets received at the AP is sufficiently high. Whenever this condition is
+no longer satisfied, \texttt{tedproxy} also enables the other network interfaces for
+forwarding traffic.
+
+For instance \texttt{tedproxy} can listen to UDP local port 5006 and forward
+everything to host 130.136.4.138 at UDP port 5001 through the wlan1
+mac80211 device and the rmnet0 device which is usually the cellular network
+interface on Android smartphones:
+
+\begin{lstlisting}
+tedproxy -b -i t:wlan1 -i rmnet0 5006 130.136.4.138 5001
+\end{lstlisting}
+
+\newpage
+\section{Relay and CN tools}
+\subsection{Relay}
+The relay activation is quite simple. From the proxy server that you elected as
+the RTP relay do the following:
+
+\begin{lstlisting}
+cd abps_repo/udprelay
+python3 udprelay.py 5001:5002
+\end{lstlisting}
+
+Start the \texttt{udprelay} process which listens on two UDP ports.
+Indeed you can specify any ports you like but keep in mind the first is
+where the MN attaches to and the second is where the
+fixed CN attaches to.
+
+\subsection{CN tools}
+CN tools is a set of software tools collected in \texttt{abps\_repo/cntools}
+that are required to enable an RTP receiving end on the CN. First of all you need
+\texttt{ffmpeg} installed on the CN machine. At the time of writing
+\texttt{ffmpeg} is
+not present on debian distributions since it has been replaced with
+\texttt{avconv}. I did not investigate further but \texttt{avconv} did not work
+well in my test environment. Thus since my CN was running a debian ``jessie''
+distribution I compiled \texttt{ffmpeg} from sources. Once you obtained
+\texttt{ffmpeg} working on your CN machine you can run the \texttt{launcher.sh} script:
+
+\begin{lstlisting}
+cd abps_repo/cntools
+./launcher.sh 130.136.4.138 5002 5006 outputvideo.ogg
+\end{lstlisting}
+
+where 130.136.4.138 is the remote host IP address, 5002 the remote UDP port and
+5006 the local UDP port.
+
+The script first launches the \texttt{dummystdserver} HTTP server which
+serves an SDP file at the address \texttt{http://127.0.0.1:8080/camera.sdp}.
+Then it launches \texttt{cnproxy} passing to it the host IP address and both
+ports as arguments and runs \texttt{ffmpeg} as last step. When launched \texttt{cnproxy} 
+sends an initialization datagram to the remote host then starts forwarding
+remote host's responses to the local UDP port, 5006 in this case, which \texttt{ffmpeg}
+listens to. Thus \texttt{ffmpeg} first gets the \texttt{camera.sdp} file from
+the \texttt{dummystdserver} then receives on a local UDP port, specified in the sdp file,
+datagrams forwarded by \texttt{cnproxy} and eventually writes the output video file.
+Be sure the remote UDP port corresponds to the one the destination is listening
+to and that the local UDP port corresponds to the one specified in the sdp
+file.
+
+\subsection{Put everything together}
+Now that you have everything installed and configured you can stream some UDP
+traffic from the multi-homed mobile device to the CN passing through the relay. For instance
+let us consider an RTP camera streamer installed on the mobile device that
+sends RTP packets to the CN. On the mobile device you must first run
+\texttt{tedproxy}:
+\begin{lstlisting}
+tedproxy -b -i t:wlan1 -i rmnet0 5006 130.136.4.138 5001
+\end{lstlisting}
+then activate the relay application on the remote proxy:
+\begin{lstlisting}
+python3 udprelay.py 5001:5002
+\end{lstlisting}
+
+Now start the CN tools with the \texttt{launcher.sh} script:
+\begin{lstlisting}
+./launcher.sh 130.136.4.138 5002 5006 outputvideo.ogg
+\end{lstlisting}
+
+It will send an initialization packet to the relay and then it will wait for user
+confirmation before starting \texttt{ffmpeg}. Before confirming, start the
+stream from the mobile device. Be sure the RTP streamer application sends
+packets to 127.0.0.1 and UDP port 5006 which is the port \texttt{tedproxy} is
+listening to. I used a proprietary camera streamer application
+(\url{https://play.google.com/store/apps/details?id=com.miv.rtpcamera}).
+However any similar application should work well.
+
+\bibliographystyle{plain}
+\footnotesize
+\bibliography{man.bib}
+\end{document}

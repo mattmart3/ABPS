@@ -64,10 +64,10 @@ Several well documented guides explaining how to build a custom kernel exists in
 Let's pick one as instance:
 https://wiki.archlinux.org/index.php/Kernels/Traditional_compilation
 
-As the guide itself explains, for a faster compilation `make localmodconf` 
-is recommended but be sure that all the modules you will need later 
+As the guide explains, `make localmodconf` is recommended for faster compilation but be sure
+that all the modules you will need later 
 are currently loaded.  
-At the end, to start the build just run:
+At the end, just run to start the build:
 
 	make -jN
 
@@ -82,7 +82,7 @@ or refer to your linux distribution kernel install method.
 
 ## Android
 The following steps are known to be working, at the time of writing, 
-for the Google Nexus 5 with Android 6 Marshmallow.
+for the LG Nexus 5 with Android 6 Marshmallow.
 
 ### Prerequisites 
 You will need some Android tools such as ``adb`` and ``fastboot``. In debian like
@@ -93,7 +93,7 @@ developers reference website (https://developer.android.com/ndk).
 
 ### Enable root privileges
 Since TED requires a device which supports mac80211, 
-the inner WiFi module (Broadcom BCM4329) of the Google Nexus 5 can't be used. 
+the inner WiFi module (Broadcom BCM4329) of the LG Nexus 5 can't be used. 
 In fact the BCM4329 module works as a Full MAC device with a proprietary and closed source firmware, 
 without any support for the mac80211 subsystem.
 Anyway the TED kernel and its proxy application can be tested using an external USB WiFi dongle which
@@ -134,7 +134,7 @@ First give a look at the official android documentation, in order to understand
 what kernel version you need depending on your device and get the right tools:
 https://source.android.com/source/building-kernels.html .
 Here I post the steps needed to get the right tools and kernel version for 
-a Google Nexus 5 device.
+a LG Nexus 5 device.
 
 Get the prebuilt toolchain (compiler, liker, etc..), move it wherever you like and export its path:
 
@@ -156,7 +156,7 @@ From the root directory of the android kernel repository:
 
 ### Configure and build
 Since TED requires a device which supports mac80211, 
-the inner WiFi module (Broadcom BCM4329) of the Google Nexus 5 can't be used. 
+the inner WiFi module (Broadcom BCM4329) of the LG Nexus 5 can't be used. 
 In fact the BCM4329 module works as  a Full MAC device and a closed source firmware 
 without any support for the mac80211 subsystem.
 
