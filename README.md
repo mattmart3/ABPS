@@ -11,7 +11,7 @@ This collection includes:
 - Correspondent Node (CN) Tools: simple software tools to enable a receiving counterpart
 
 You can find more documentation for each component in their corresponding
- subdirectory or under the `doc` folder.  
+ subdirectory or in the `doc` folder.  
 TED patches and TED proxy both reside in `tedproxy` folder.
 
 See the following for more information on ABPS.
