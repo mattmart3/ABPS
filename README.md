@@ -23,7 +23,8 @@ See the following for more information on ABPS.
 	   http://ieeexplore.ieee.org/document/6402830/ (Restricted Access)
 
 * Past Thesis:
-	- *Matteo Martelli's master thesis* is hold in the doc folder of this repository.
+	- *Matteo Martelli's master thesis* is held in the doc folder of this repository   
+      [doc/matteo_martelli_master_thesis/matteo_martelli_dissertation.pdf](doc/matteo_martelli_master_thesis/matteo_martelli_dissertation.pdf)
 	- *Alessandro Mengoli's bachelor thesis* (Italian language)  
       http://amslaurea.unibo.it/8981/1/mengoli_alessandro_tesi.pdf
 	- *Gabriele Mengoli's bachelor thesis* (Italian language)  
